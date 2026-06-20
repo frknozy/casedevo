@@ -25,28 +25,43 @@ function buildStrip(skins: Skin[], winner: Skin): Skin[] {
   );
 }
 
-function SkinTile({ skin, small }: { skin: Skin; small?: boolean }) {
+function KnifeIcon({ color, size = 64 }: { color: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none"
+      style={{ filter: `drop-shadow(0 2px 10px ${color}80)` }}>
+      <path d="M48 8 L16 40 L20 44 L24 48 L56 16 Z" fill={color} opacity="0.9" />
+      <path d="M16 40 L12 52 L24 48 Z" fill={color} opacity="0.6" />
+      <path d="M48 8 L56 16 L52 20 L44 12 Z" fill="white" opacity="0.3" />
+    </svg>
+  );
+}
+
+function SkinTile({ skin }: { skin: Skin }) {
   const c = RARITY_COLORS[skin.rarity];
-  const h = small ? 120 : 140;
+  const isKnife = skin.weapon.startsWith('★');
   return (
     <div className="flex-shrink-0 rounded-xl overflow-hidden flex flex-col select-none"
       style={{
         width: ITEM_W,
-        height: h,
+        height: 140,
         background: `linear-gradient(180deg, ${c}22 0%, ${c}08 100%)`,
         border: `2px solid ${c}55`,
       }}>
       <div className="flex-1 flex items-center justify-center relative overflow-hidden">
         <div className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full" style={{ background: c }} />
-        <Image
-          src={skin.image}
-          alt={`${skin.weapon} | ${skin.name}`}
-          width={110}
-          height={80}
-          className="object-contain drop-shadow-lg"
-          style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.5))' }}
-          unoptimized
-        />
+        {isKnife ? (
+          <KnifeIcon color={c} size={56} />
+        ) : (
+          <Image
+            src={skin.image}
+            alt={`${skin.weapon} | ${skin.name}`}
+            width={110}
+            height={80}
+            className="object-contain"
+            style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.5))' }}
+            unoptimized
+          />
+        )}
       </div>
       <div className="px-1.5 pb-1.5 text-center">
         <div className="font-bold leading-tight truncate" style={{ fontSize: 9, color: c }}>{skin.weapon}</div>
@@ -77,24 +92,39 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
   const [history, setHistory] = useState<Skin[]>([]);
   const reelRefs = useRef<(HTMLDivElement | null)[]>([]);
   const reelsRef = useRef<SingleReel[]>([]);
+  const animParamsRef = useRef<{ duration: number; easing: string } | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
     return () => timers.current.forEach(t => clearTimeout(t));
   }, []);
 
-  // Keep reelsRef in sync so the allDone effect can read latest reels
   useEffect(() => { reelsRef.current = reels; }, [reels]);
 
-  const c = cases.find(x => x.id === id);
-  const cost = (c?.price ?? 0) * qty;
-  const canOpen = !!c && balance >= cost && !spinning && !allDone;
+  // Apply reel animation after reels are committed to DOM
+  useEffect(() => {
+    if (!animParamsRef.current || reels.length === 0) return;
+    const { duration, easing } = animParamsRef.current;
+    animParamsRef.current = null;
 
-  // After allDone, assign inventory IDs (runs after render, safe to call Zustand here)
+    const raf = requestAnimationFrame(() => {
+      reels.forEach((_, idx) => {
+        const el = reelRefs.current[idx];
+        if (!el) return;
+        const jitter = (Math.random() - 0.5) * ITEM_W * 0.45;
+        const targetX = -(WINNER_POS * STEP + jitter);
+        el.style.transition = `transform ${duration}ms ${easing}`;
+        el.style.transform = `translateX(${targetX}px)`;
+      });
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [reels]);
+
   useEffect(() => {
     if (!allDone) return;
     const current = reelsRef.current;
-    if (current.every(r => r.inventoryId !== null)) return; // already assigned
+    if (current.every(r => r.inventoryId !== null)) return;
     const updated = current.map(reel => {
       if (!reel.winner || reel.inventoryId !== null) return reel;
       return { ...reel, inventoryId: addToInventory(reel.winner), done: true };
@@ -103,12 +133,16 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDone]);
 
+  const c = cases.find(x => x.id === id);
+  const cost = (c?.price ?? 0) * qty;
+  const canOpen = !!c && balance >= cost && !spinning && !allDone;
+
   const openCase = useCallback(() => {
     if (!c || !canOpen) return;
     if (!deductBalance(cost)) return;
 
     const duration = fast ? 700 : 5000;
-    const easing = fast ? 'ease-out' : 'cubic-bezier(0.12, 0.0, 0.0, 1.0)';
+    const easing = fast ? 'ease-out' : 'cubic-bezier(0.0, 0.0, 0.15, 1.0)';
     const newReels: SingleReel[] = [];
 
     for (let i = 0; i < qty; i++) {
@@ -116,23 +150,13 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
       newReels.push({ key: Date.now() + i, strip: buildStrip(c.skins, winner), winner, inventoryId: null, done: false });
     }
 
+    // Store anim params before triggering re-render — useEffect reads them after DOM commits
+    animParamsRef.current = { duration, easing };
+    reelRefs.current = new Array(qty).fill(null);
+
     setReels(newReels);
     setSpinning(true);
     setAllDone(false);
-    reelRefs.current = new Array(qty).fill(null);
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        newReels.forEach((reel, idx) => {
-          const el = reelRefs.current[idx];
-          if (!el) return;
-          const jitter = (Math.random() - 0.5) * ITEM_W * 0.45;
-          const targetX = -(WINNER_POS * STEP + jitter);
-          el.style.transition = `transform ${duration}ms ${easing}`;
-          el.style.transform = `translateX(${targetX}px)`;
-        });
-      });
-    });
 
     const t = setTimeout(() => {
       const wonSkins = newReels.map(r => r.winner).filter(Boolean) as Skin[];
@@ -145,6 +169,10 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
   }, [c, canOpen, deductBalance, cost, fast, qty]);
 
   const resetAll = useCallback(() => {
+    // Clear transforms on existing reel elements before unmounting
+    reelRefs.current.forEach(el => {
+      if (el) { el.style.transition = 'none'; el.style.transform = ''; }
+    });
     setReels([]);
     setAllDone(false);
     setSpinning(false);
@@ -158,9 +186,8 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
 
   const handleSellAll = () => {
     reels.forEach(reel => {
-      if (reel.winner && reel.inventoryId && reel.inventoryId !== 'sold') {
+      if (reel.winner && reel.inventoryId && reel.inventoryId !== 'sold')
         sellItem(reel.inventoryId, reel.winner.price);
-      }
     });
     setReels(prev => prev.map(r => ({ ...r, inventoryId: 'sold' })));
   };
@@ -200,16 +227,16 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
         <div className="space-y-4">
           <div className="card p-5 text-center">
             {/* Case image */}
-            <div className="w-32 h-32 mx-auto rounded-2xl flex items-center justify-center mb-4 animate-float overflow-hidden"
+            <div className="w-36 h-36 mx-auto rounded-2xl flex items-center justify-center mb-4 animate-float overflow-hidden"
               style={{ background: `linear-gradient(135deg, ${from}, ${to})`, border: '1px solid rgba(255,255,255,0.08)' }}>
-              <Image src={c.image} alt={c.name} width={120} height={120} className="object-contain" unoptimized />
+              <Image src={c.image} alt={c.name} width={128} height={128} className="object-contain" unoptimized />
             </div>
-            <h1 className="text-base font-black mb-0.5">{c.name}</h1>
-            <div className="text-2xl font-black text-yellow-400 mb-4">${c.price.toFixed(2)}</div>
+            <h1 className="text-lg font-black mb-0.5">{c.name}</h1>
+            <div className="text-3xl font-black text-yellow-400 mb-5">${c.price.toFixed(2)}</div>
 
             {/* Quantity */}
             <div className="mb-4">
-              <div className="text-xs font-semibold mb-2 tracking-widest" style={{ color: 'var(--text-muted)' }}>QUANTITY</div>
+              <div className="text-xs font-semibold mb-2 tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Quantity</div>
               <div className="flex gap-2 justify-center">
                 {[1, 2, 3, 5].map(q => (
                   <button key={q}
@@ -228,15 +255,15 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
             </div>
 
             {/* Fast mode */}
-            <div className="flex justify-center mb-4">
+            <div className="flex justify-center mb-5">
               <button onClick={() => setFast(f => !f)} disabled={spinning}
-                className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all"
                 style={{
                   background: fast ? 'rgba(249,115,22,0.15)' : 'var(--bg-secondary)',
                   border: `1px solid ${fast ? '#f97316' : 'var(--border)'}`,
                   color: fast ? '#f97316' : 'var(--text-muted)',
                 }}>
-                ⚡ Fast {fast ? 'ON' : 'OFF'}
+                ⚡ Fast Open {fast ? 'ON' : 'OFF'}
               </button>
             </div>
 
@@ -249,7 +276,7 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
                 <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg> Rolling...</>
+                </svg> Spinning...</>
               ) : allDone
                 ? '🔄 Open Again'
                 : `📦 Open${qty > 1 ? ` ${qty}x` : ''} — $${cost.toFixed(2)}`}
@@ -270,16 +297,23 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
           {history.length > 0 && (
             <div className="card p-4">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold tracking-widest" style={{ color: 'var(--text-muted)' }}>SESSION HISTORY</span>
-                <span className="text-xs font-bold text-yellow-400">${history.reduce((s, i) => s + i.price, 0).toFixed(2)}</span>
+                <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Session</span>
+                <span className="text-xs font-black text-yellow-400">${history.reduce((s, i) => s + i.price, 0).toFixed(2)}</span>
               </div>
               <div className="space-y-1.5">
-                {history.slice(0, 6).map((s, i) => {
+                {history.slice(0, 8).map((s, i) => {
                   const clr = RARITY_COLORS[s.rarity];
+                  const isKnife = s.weapon.startsWith('★');
                   return (
-                    <div key={i} className="flex items-center gap-2 p-1.5 rounded-lg"
+                    <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
                       style={{ background: `${clr}10`, border: `1px solid ${clr}25` }}>
-                      <Image src={s.image} alt={s.name} width={28} height={20} className="object-contain flex-shrink-0" unoptimized />
+                      <div className="w-7 h-7 flex-shrink-0 flex items-center justify-center">
+                        {isKnife ? (
+                          <span style={{ fontSize: 16 }}>🔪</span>
+                        ) : (
+                          <Image src={s.image} alt={s.name} width={28} height={20} className="object-contain" unoptimized />
+                        )}
+                      </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-semibold truncate" style={{ color: clr, fontSize: 10 }}>{s.weapon} | {s.name}</div>
                       </div>
@@ -294,7 +328,7 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
 
         {/* ── Main ── */}
         <div className="space-y-4">
-          {/* Reels — only shown once user has clicked Open */}
+          {/* Reels — only shown after clicking Open */}
           {reels.length > 0 && (
             <div className="space-y-3">
               {reels.map((reel, idx) => (
@@ -305,31 +339,32 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
                     </span>
                     {spinning && (
                       <span className="text-xs font-semibold flex items-center gap-1.5" style={{ color: '#f97316' }}>
-                        <span className="w-2 h-2 rounded-full bg-orange-500" style={{ animation: 'pulse 1s infinite' }} />
+                        <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
                         Spinning...
                       </span>
                     )}
                   </div>
 
                   <div className="relative" style={{ background: 'var(--bg-secondary)', paddingTop: 12, paddingBottom: 12 }}>
-                    {/* Arrows */}
+                    {/* Top arrow */}
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
                       <div style={{ width: 0, height: 0, borderLeft: '8px solid transparent', borderRight: '8px solid transparent', borderTop: '12px solid #f97316' }} />
                     </div>
+                    {/* Bottom arrow */}
                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
                       <div style={{ width: 0, height: 0, borderLeft: '8px solid transparent', borderRight: '8px solid transparent', borderBottom: '12px solid #f97316' }} />
                     </div>
                     {/* Center line */}
                     <div className="absolute inset-0 left-1/2 -translate-x-px w-0.5 z-20 pointer-events-none"
-                      style={{ background: 'rgba(249,115,22,0.8)' }} />
+                      style={{ background: 'rgba(249,115,22,0.9)' }} />
                     {/* Highlight box */}
                     <div className="absolute inset-y-3 left-1/2 z-10 pointer-events-none rounded-xl"
                       style={{
-                        width: ITEM_W + 6,
-                        transform: `translateX(calc(-50% - 3px))`,
-                        border: '2px solid rgba(249,115,22,0.6)',
-                        background: 'rgba(249,115,22,0.05)',
-                        boxShadow: '0 0 20px rgba(249,115,22,0.2)',
+                        width: ITEM_W + 8,
+                        transform: `translateX(calc(-50% - 4px))`,
+                        border: '2px solid rgba(249,115,22,0.65)',
+                        background: 'rgba(249,115,22,0.06)',
+                        boxShadow: '0 0 24px rgba(249,115,22,0.25)',
                       }} />
 
                     {/* Reel strip */}
@@ -350,9 +385,9 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
                     </div>
 
                     {/* Fade edges */}
-                    <div className="absolute inset-y-3 left-3 w-24 pointer-events-none z-10"
+                    <div className="absolute inset-y-3 left-3 w-28 pointer-events-none z-10"
                       style={{ background: 'linear-gradient(to right, var(--bg-secondary), transparent)' }} />
-                    <div className="absolute inset-y-3 right-3 w-24 pointer-events-none z-10"
+                    <div className="absolute inset-y-3 right-3 w-28 pointer-events-none z-10"
                       style={{ background: 'linear-gradient(to left, var(--bg-secondary), transparent)' }} />
                   </div>
                 </div>
@@ -360,17 +395,17 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
             </div>
           )}
 
-          {/* Multi-result summary when all done */}
+          {/* Results when all done */}
           {allDone && reels.length > 0 && (
             <div className="card p-5 animate-fade-up">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-base">
-                  🎉 {reels.length > 1 ? `You opened ${reels.length} cases!` : 'You got:'}
+                  🎉 {reels.length > 1 ? `Opened ${reels.length} cases!` : 'You got:'}
                 </h3>
                 {reels.length > 1 && (
                   <div className="text-right">
                     <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Total Value</div>
-                    <div className="font-black text-yellow-400 text-lg">${totalWon.toFixed(2)}</div>
+                    <div className="font-black text-yellow-400 text-xl">${totalWon.toFixed(2)}</div>
                   </div>
                 )}
               </div>
@@ -380,17 +415,22 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
                   if (!reel.winner) return null;
                   const clr = RARITY_COLORS[reel.winner.rarity];
                   const sold = reel.inventoryId === 'sold';
+                  const isKnife = reel.winner.weapon.startsWith('★');
                   return (
                     <div key={reel.key} className="rounded-xl p-3 text-center transition-all"
                       style={{
                         background: `${clr}12`,
                         border: `2px solid ${sold ? 'var(--border)' : clr}`,
                         boxShadow: sold ? 'none' : `0 0 20px ${clr}25`,
-                        opacity: sold ? 0.6 : 1,
+                        opacity: sold ? 0.55 : 1,
                       }}>
                       <div className="h-20 flex items-center justify-center mb-2">
-                        <Image src={reel.winner.image} alt={reel.winner.name} width={90} height={65}
-                          className="object-contain" style={{ filter: `drop-shadow(0 0 8px ${clr}80)` }} unoptimized />
+                        {isKnife ? (
+                          <KnifeIcon color={clr} size={60} />
+                        ) : (
+                          <Image src={reel.winner.image} alt={reel.winner.name} width={90} height={65}
+                            className="object-contain" style={{ filter: `drop-shadow(0 0 10px ${clr}80)` }} unoptimized />
+                        )}
                       </div>
                       <div className="text-xs font-bold truncate mb-0.5" style={{ color: clr, fontSize: 9 }}>
                         {RARITY_LABELS[reel.winner.rarity].toUpperCase()}
@@ -403,12 +443,12 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
                         <button onClick={() => handleSell(reel)}
                           className="w-full py-1 rounded-lg text-xs font-bold transition-all"
                           style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.35)' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.25)')}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.28)')}
                           onMouseLeave={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.15)')}>
-                          Sell
+                          Sell ${reel.winner.price.toFixed(2)}
                         </button>
                       ) : sold ? (
-                        <div className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Sold</div>
+                        <div className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>✓ Sold</div>
                       ) : null}
                     </div>
                   );
@@ -451,19 +491,24 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               {sortedSkins.map(skin => {
                 const clr = RARITY_COLORS[skin.rarity];
+                const isKnife = skin.weapon.startsWith('★');
                 return (
                   <div key={skin.id} className="rounded-xl p-3 flex items-center gap-2.5 transition-all"
-                    style={{ background: `${clr}10`, border: `1px solid ${clr}35`, cursor: 'default' }}
+                    style={{ background: `${clr}10`, border: `1px solid ${clr}35` }}
                     onMouseEnter={e => (e.currentTarget.style.background = `${clr}20`)}
                     onMouseLeave={e => (e.currentTarget.style.background = `${clr}10`)}>
-                    <div className="w-12 h-10 flex-shrink-0 flex items-center justify-center">
-                      <Image src={skin.image} alt={`${skin.weapon} | ${skin.name}`}
-                        width={52} height={38} className="object-contain" unoptimized />
+                    <div className="w-14 h-12 flex-shrink-0 flex items-center justify-center">
+                      {isKnife ? (
+                        <KnifeIcon color={clr} size={36} />
+                      ) : (
+                        <Image src={skin.image} alt={`${skin.weapon} | ${skin.name}`}
+                          width={52} height={38} className="object-contain" unoptimized />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-bold truncate" style={{ color: clr, fontSize: 9 }}>{skin.weapon}</div>
+                      <div className="font-bold truncate" style={{ color: clr, fontSize: 10 }}>{skin.weapon}</div>
                       <div className="font-semibold truncate" style={{ fontSize: 9, color: 'var(--text-secondary)' }}>{skin.name}</div>
-                      <div style={{ fontSize: 8, color: 'var(--text-muted)' }}>{RARITY_LABELS[skin.rarity]}</div>
+                      <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>{RARITY_LABELS[skin.rarity]}</div>
                       <div className="font-black text-yellow-400" style={{ fontSize: 11 }}>${skin.price.toFixed(2)}</div>
                     </div>
                   </div>
