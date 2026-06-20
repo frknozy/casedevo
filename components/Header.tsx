@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 
 export default function Header() {
@@ -10,6 +10,13 @@ export default function Header() {
   const [showDeposit, setShowDeposit] = useState(false);
   const [depositAmount, setDepositAmount] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Listen for deposit open event from child pages
+  useEffect(() => {
+    const handler = () => setShowDeposit(true);
+    window.addEventListener('open-deposit', handler);
+    return () => window.removeEventListener('open-deposit', handler);
+  }, []);
 
   const navLinks = [
     { href: '/', label: 'Cases', icon: '📦' },

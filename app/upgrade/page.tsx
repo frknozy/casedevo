@@ -1,29 +1,119 @@
 'use client';
 import { useState, useRef } from 'react';
-import { useStore } from '@/store/useStore';
-import { RARITY_COLORS, RARITY_LABELS, cases, Skin } from '@/lib/data';
 import Link from 'next/link';
+import { useStore } from '@/store/useStore';
+import { RARITY_COLORS, RARITY_LABELS, cases, Skin, Rarity } from '@/lib/data';
 
-const allSkins: Skin[] = cases.flatMap(c => c.skins);
-const uniqueSkins = allSkins.filter((s, i, arr) => arr.findIndex(x => x.id === s.id) === i)
-  .sort((a, b) => a.price - b.price);
+// Deduplicated skin list — defined outside component to avoid re-creation
+const allSkins: Skin[] = Object.values(
+  cases.flatMap(c => c.skins).reduce<Record<string, Skin>>((acc, s) => {
+    if (!acc[s.id]) acc[s.id] = s;
+    return acc;
+  }, {})
+).sort((a, b) => a.price - b.price);
+
+const RARITY_ORDER: Rarity[] = ['consumer', 'industrial', 'milspec', 'restricted', 'classified', 'covert', 'extraordinary'];
+
+interface SkinPickerProps {
+  title: string;
+  current: Skin | null;
+  onSelect: (s: Skin) => void;
+  filter?: (s: Skin) => boolean;
+}
+
+function SkinPicker({ title, current, onSelect, filter }: SkinPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const list = allSkins
+    .filter(filter ?? (() => true))
+    .filter(s => !search || `${s.weapon} ${s.name}`.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="card p-5">
+      <h3 className="text-xs font-bold tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>{title}</h3>
+
+      {current ? (
+        <div>
+          <div className="h-32 rounded-xl flex items-center justify-center text-5xl mb-3"
+            style={{
+              background: `${RARITY_COLORS[current.rarity]}15`,
+              border: `2px solid ${RARITY_COLORS[current.rarity]}50`,
+            }}>
+            🔫
+          </div>
+          <div className="text-sm font-bold truncate" style={{ color: RARITY_COLORS[current.rarity] }}>
+            {current.weapon} | {current.name}
+          </div>
+          <div className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{RARITY_LABELS[current.rarity]}</div>
+          <div className="text-2xl font-black text-yellow-400 mb-3">${current.price.toFixed(2)}</div>
+          <button onClick={() => setOpen(o => !o)} className="btn-secondary w-full text-sm py-2">
+            {open ? 'Close' : 'Change Skin'}
+          </button>
+        </div>
+      ) : (
+        <button onClick={() => setOpen(o => !o)}
+          className="w-full h-40 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all"
+          style={{ borderColor: open ? '#f97316' : 'var(--border)', color: 'var(--text-muted)' }}>
+          <span className="text-4xl">+</span>
+          <span className="text-sm font-semibold">Select Skin</span>
+        </button>
+      )}
+
+      {open && (
+        <div className="mt-3 border rounded-xl overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+          <div className="p-2 border-b" style={{ borderColor: 'var(--border)' }}>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search…"
+              className="w-full px-2.5 py-1.5 rounded-lg text-sm outline-none"
+              style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: 240 }}>
+            {list.length === 0 ? (
+              <div className="p-4 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No skins found</div>
+            ) : list.map(skin => {
+              const clr = RARITY_COLORS[skin.rarity];
+              const isActive = current?.id === skin.id;
+              return (
+                <button key={skin.id}
+                  onClick={() => { onSelect(skin); setOpen(false); setSearch(''); }}
+                  className="w-full flex items-center gap-3 p-2.5 text-left transition-all"
+                  style={{
+                    background: isActive ? `${clr}20` : 'transparent',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                  onMouseEnter={e => !isActive && (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                  onMouseLeave={e => !isActive && (e.currentTarget.style.background = 'transparent')}>
+                  <span className="text-xl flex-shrink-0">🔫</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold truncate" style={{ color: clr }}>{skin.weapon} | {skin.name}</div>
+                    <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{RARITY_LABELS[skin.rarity]}</div>
+                  </div>
+                  <span className="text-sm font-black text-yellow-400 flex-shrink-0">${skin.price.toFixed(2)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function UpgradePage() {
-  const { balance, deductBalance, addBalance } = useStore();
+  const { balance, deductBalance, addBalance, addToInventory } = useStore();
   const [inputSkin, setInputSkin] = useState<Skin | null>(null);
   const [targetSkin, setTargetSkin] = useState<Skin | null>(null);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<'win' | 'lose' | null>(null);
-  const [rotation, setRotation] = useState(0);
-  const [showSelectInput, setShowSelectInput] = useState(false);
-  const [showSelectTarget, setShowSelectTarget] = useState(false);
-  const dialRef = useRef<HTMLDivElement>(null);
+  const [needleAngle, setNeedleAngle] = useState(0);
+  const needleRef = useRef<HTMLDivElement>(null);
 
-  const successChance = inputSkin && targetSkin
-    ? Math.min(95, Math.max(2, (inputSkin.price / targetSkin.price) * 100))
+  const successChance = inputSkin && targetSkin && targetSkin.price > inputSkin.price
+    ? Math.min(95, Math.max(1, (inputSkin.price / targetSkin.price) * 100))
     : 0;
 
-  const canUpgrade = !!inputSkin && !!targetSkin && !spinning && targetSkin.price > inputSkin.price;
+  const canUpgrade = !!inputSkin && !!targetSkin && targetSkin.price > inputSkin.price
+    && balance >= inputSkin.price && !spinning && result === null;
 
   const doUpgrade = () => {
     if (!canUpgrade || !inputSkin || !targetSkin) return;
@@ -33,251 +123,179 @@ export default function UpgradePage() {
     setResult(null);
 
     const won = Math.random() * 100 < successChance;
+    // Win zone: 0 → successChance degrees. Lose zone: successChance → 360.
+    // We want needle to land in the appropriate zone.
     const finalAngle = won
-      ? 360 * 5 + (successChance / 2) // land in win zone
-      : 360 * 5 + successChance + 20; // land in lose zone
+      ? 360 * 6 + successChance * 0.5 * (Math.random()) // land in green zone
+      : 360 * 6 + successChance + (100 - successChance) * Math.random(); // land in red zone
 
-    setRotation(prev => prev + finalAngle);
+    setNeedleAngle(prev => prev + finalAngle);
 
     setTimeout(() => {
       setSpinning(false);
+      setResult(won ? 'win' : 'lose');
       if (won) {
-        setResult('win');
         addBalance(targetSkin.price);
-      } else {
-        setResult('lose');
+        addToInventory(targetSkin);
       }
-    }, 3000);
+    }, 3200);
   };
 
-  const reset = () => {
+  const resetUpgrade = () => {
     setResult(null);
     setInputSkin(null);
     setTargetSkin(null);
-    setRotation(0);
+    setNeedleAngle(0);
   };
 
-  const SkinSelector = ({ onSelect, current, filter }: { onSelect: (s: Skin) => void; current: Skin | null; filter?: (s: Skin) => boolean }) => (
-    <div className="card p-4 max-h-80 overflow-y-auto">
-      <div className="grid grid-cols-1 gap-2">
-        {uniqueSkins.filter(filter || (() => true)).map(skin => {
-          const clr = RARITY_COLORS[skin.rarity];
-          return (
-            <button
-              key={skin.id}
-              onClick={() => onSelect(skin)}
-              className="flex items-center gap-3 p-2 rounded-lg text-left transition-all"
-              style={{
-                background: current?.id === skin.id ? `${clr}20` : 'transparent',
-                border: `1px solid ${current?.id === skin.id ? clr + '60' : 'transparent'}`,
-              }}
-            >
-              <div className="text-2xl flex-shrink-0">🔫</div>
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold truncate" style={{ color: clr }}>
-                  {skin.weapon} | {skin.name}
-                </div>
-                <div className="text-sm font-bold text-yellow-400">${skin.price.toFixed(2)}</div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
+  const circumference = 2 * Math.PI * 40; // r=40
 
   return (
-    <div className="max-w-[900px] mx-auto px-4 py-8">
+    <div className="max-w-[960px] mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-black mb-2">Skin Upgrade</h1>
-        <p style={{ color: 'var(--text-muted)' }}>Trade up your skin for a chance at something better.</p>
+        <h1 className="text-3xl font-black mb-2">⬆️ Skin Upgrade</h1>
+        <p style={{ color: 'var(--text-muted)' }}>
+          Risk your skin for a chance at something better. The lower the value difference, the higher your chance.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
         {/* Input skin */}
-        <div className="card p-5">
-          <h3 className="font-semibold mb-3 text-sm" style={{ color: 'var(--text-muted)' }}>YOUR SKIN</h3>
-          {inputSkin ? (
-            <div>
-              <div
-                className="h-32 rounded-xl flex items-center justify-center text-5xl mb-3"
-                style={{
-                  background: `${RARITY_COLORS[inputSkin.rarity]}15`,
-                  border: `2px solid ${RARITY_COLORS[inputSkin.rarity]}40`,
-                }}
-              >
-                🔫
-              </div>
-              <div className="text-sm font-semibold" style={{ color: RARITY_COLORS[inputSkin.rarity] }}>
-                {inputSkin.weapon} | {inputSkin.name}
-              </div>
-              <div className="text-xl font-black text-yellow-400 mb-3">${inputSkin.price.toFixed(2)}</div>
-              <button onClick={() => { setShowSelectInput(true); setShowSelectTarget(false); }} className="btn-secondary w-full text-sm py-2">
-                Change
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => { setShowSelectInput(true); setShowSelectTarget(false); }}
-              className="w-full h-40 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all hover:border-orange-500/50"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-            >
-              <span className="text-3xl">+</span>
-              <span className="text-sm">Select Skin</span>
-            </button>
-          )}
-        </div>
+        <SkinPicker
+          title="YOUR SKIN"
+          current={inputSkin}
+          onSelect={s => { setInputSkin(s); setResult(null); }}
+        />
 
-        {/* Upgrade wheel / chance */}
+        {/* Upgrade wheel */}
         <div className="card p-5 flex flex-col items-center justify-center text-center">
-          {/* Dial */}
-          <div className="relative w-40 h-40 mb-4">
-            <svg viewBox="0 0 100 100" className="w-full h-full" style={{ transform: `rotate(${-90}deg)` }}>
-              {/* Win arc */}
-              <circle
-                cx="50" cy="50" r="40"
-                fill="none" stroke="#22c55e" strokeWidth="12"
-                strokeDasharray={`${successChance * 2.513} 251.3`}
-                style={{ transition: 'stroke-dasharray 0.5s' }}
-              />
-              {/* Lose arc */}
-              <circle
-                cx="50" cy="50" r="40"
-                fill="none" stroke="#ef4444" strokeWidth="12"
-                strokeDasharray={`${(100 - successChance) * 2.513} 251.3`}
-                strokeDashoffset={`${-successChance * 2.513}`}
-                style={{ transition: 'all 0.5s' }}
-              />
+          {/* SVG dial */}
+          <div className="relative mb-4" style={{ width: 160, height: 160 }}>
+            <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+              {/* Background ring */}
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#1e2d47" strokeWidth="14" />
+              {/* Win arc (green) */}
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#22c55e" strokeWidth="14"
+                strokeDasharray={`${(successChance / 100) * circumference} ${circumference}`}
+                style={{ transition: 'stroke-dasharray 0.5s ease' }} />
+              {/* Lose arc (red) */}
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#ef4444" strokeWidth="14"
+                strokeDasharray={`${((100 - successChance) / 100) * circumference} ${circumference}`}
+                strokeDashoffset={`${-(successChance / 100) * circumference}`}
+                style={{ transition: 'all 0.5s ease' }} />
             </svg>
-            {/* Spinner needle */}
-            <div
-              ref={dialRef}
-              className="absolute inset-0 flex items-center justify-center"
+
+            {/* Needle */}
+            <div className="absolute inset-0 flex items-center justify-center"
               style={{
-                transform: `rotate(${rotation}deg)`,
+                transform: `rotate(${needleAngle}deg)`,
                 transition: spinning ? 'transform 3s cubic-bezier(0.17, 0.67, 0.12, 0.99)' : 'none',
-              }}
-            >
-              <div className="w-0.5 h-16 origin-bottom rounded-full" style={{ background: 'white', transformOrigin: 'bottom center', position: 'absolute', bottom: '50%' }} />
+              }}>
+              <div className="w-1 rounded-full"
+                style={{
+                  height: 52,
+                  background: 'white',
+                  transformOrigin: 'bottom center',
+                  marginTop: -4,
+                  boxShadow: '0 0 6px rgba(255,255,255,0.8)',
+                }} />
             </div>
-            {/* Center */}
+
+            {/* Center dot */}
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-6 h-6 rounded-full bg-white/20 backdrop-blur-sm border border-white/30" />
+              <div className="w-5 h-5 rounded-full border-2 border-white/30"
+                style={{ background: 'var(--bg-card)' }} />
             </div>
           </div>
 
-          <div className="text-4xl font-black mb-1" style={{ color: successChance > 50 ? '#22c55e' : successChance > 20 ? '#f59e0b' : '#ef4444' }}>
-            {successChance.toFixed(1)}%
+          {/* Chance display */}
+          <div className="text-4xl font-black mb-1"
+            style={{ color: successChance >= 50 ? '#22c55e' : successChance >= 20 ? '#f59e0b' : '#ef4444' }}>
+            {successChance > 0 ? `${successChance.toFixed(1)}%` : '—'}
           </div>
-          <div className="text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Win Chance</div>
+          <div className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>Win Chance</div>
 
-          {result === 'win' && (
-            <div className="mt-3 text-green-400 font-bold animate-fade-up">🎉 You Won!</div>
-          )}
-          {result === 'lose' && (
-            <div className="mt-3 text-red-400 font-bold animate-fade-up">💀 You Lost</div>
-          )}
-
-          <div className="mt-4 w-full">
-            <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--text-muted)' }}>
+          {/* Progress bar */}
+          <div className="w-full">
+            <div className="flex justify-between text-xs mb-1">
               <span className="text-green-400">WIN</span>
               <span className="text-red-400">LOSE</span>
             </div>
             <div className="h-2 rounded-full overflow-hidden" style={{ background: '#ef4444' }}>
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{ width: `${successChance}%`, background: '#22c55e' }}
-              />
+              <div className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${successChance}%`, background: '#22c55e' }} />
             </div>
           </div>
+
+          {/* Result */}
+          {result === 'win' && (
+            <div className="mt-4 px-4 py-2 rounded-xl text-sm font-bold animate-fade-up"
+              style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.4)' }}>
+              🎉 You Won! +${targetSkin?.price.toFixed(2)}
+            </div>
+          )}
+          {result === 'lose' && (
+            <div className="mt-4 px-4 py-2 rounded-xl text-sm font-bold animate-fade-up"
+              style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)' }}>
+              💀 You Lost −${inputSkin?.price.toFixed(2)}
+            </div>
+          )}
         </div>
 
         {/* Target skin */}
-        <div className="card p-5">
-          <h3 className="font-semibold mb-3 text-sm" style={{ color: 'var(--text-muted)' }}>TARGET SKIN</h3>
-          {targetSkin ? (
-            <div>
-              <div
-                className="h-32 rounded-xl flex items-center justify-center text-5xl mb-3"
-                style={{
-                  background: `${RARITY_COLORS[targetSkin.rarity]}15`,
-                  border: `2px solid ${RARITY_COLORS[targetSkin.rarity]}40`,
-                }}
-              >
-                🔫
-              </div>
-              <div className="text-sm font-semibold" style={{ color: RARITY_COLORS[targetSkin.rarity] }}>
-                {targetSkin.weapon} | {targetSkin.name}
-              </div>
-              <div className="text-xl font-black text-yellow-400 mb-3">${targetSkin.price.toFixed(2)}</div>
-              <button onClick={() => { setShowSelectTarget(true); setShowSelectInput(false); }} className="btn-secondary w-full text-sm py-2">
-                Change
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => { setShowSelectTarget(true); setShowSelectInput(false); }}
-              className="w-full h-40 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all hover:border-orange-500/50"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-            >
-              <span className="text-3xl">+</span>
-              <span className="text-sm">Select Target</span>
-            </button>
-          )}
-        </div>
+        <SkinPicker
+          title="TARGET SKIN"
+          current={targetSkin}
+          filter={s => !inputSkin || s.price > inputSkin.price}
+          onSelect={s => { setTargetSkin(s); setResult(null); }}
+        />
       </div>
 
-      {/* Skin selector dropdown */}
-      {showSelectInput && (
-        <div className="mb-6">
-          <h3 className="font-semibold mb-3">Select Your Skin</h3>
-          <SkinSelector
-            current={inputSkin}
-            onSelect={(s) => { setInputSkin(s); setShowSelectInput(false); }}
-          />
+      {/* Validation messages */}
+      {inputSkin && targetSkin && targetSkin.price <= inputSkin.price && (
+        <div className="mb-4 p-3 rounded-xl text-sm text-center"
+          style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+          Target skin must have a higher value than your skin
         </div>
       )}
-      {showSelectTarget && (
-        <div className="mb-6">
-          <h3 className="font-semibold mb-3">Select Target Skin</h3>
-          <SkinSelector
-            current={targetSkin}
-            filter={s => !inputSkin || s.price > inputSkin.price}
-            onSelect={(s) => { setTargetSkin(s); setShowSelectTarget(false); }}
-          />
+      {inputSkin && balance < inputSkin.price && (
+        <div className="mb-4 p-3 rounded-xl text-sm text-center"
+          style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+          Insufficient balance to upgrade this skin
         </div>
       )}
 
-      {/* Action */}
-      <div className="flex justify-center gap-4">
+      {/* Action buttons */}
+      <div className="flex gap-3 justify-center flex-wrap">
         {result ? (
-          <button onClick={reset} className="btn-primary text-lg px-8 py-3">
-            Try Again
-          </button>
+          <>
+            <button onClick={resetUpgrade} className="btn-primary px-8 py-3">Try Again</button>
+            <Link href="/inventory" className="btn-secondary px-8 py-3" style={{ textDecoration: 'none' }}>View Inventory</Link>
+          </>
         ) : (
-          <button
-            onClick={doUpgrade}
-            disabled={!canUpgrade}
-            className="btn-primary text-lg px-8 py-3"
-          >
-            {spinning ? '🎰 Upgrading...' : `⬆️ Upgrade (${successChance.toFixed(1)}% chance)`}
-          </button>
+          <>
+            <button onClick={doUpgrade} disabled={!canUpgrade}
+              className="btn-primary px-8 py-3 text-base">
+              {spinning
+                ? '🎰 Upgrading...'
+                : canUpgrade
+                  ? `⬆️ Upgrade (${successChance.toFixed(1)}% chance)`
+                  : '⬆️ Select skins to upgrade'}
+            </button>
+            <Link href="/" className="btn-secondary px-8 py-3" style={{ textDecoration: 'none' }}>← Back</Link>
+          </>
         )}
-        <Link href="/" className="btn-secondary text-lg px-8 py-3 no-underline">
-          Back to Cases
-        </Link>
       </div>
 
-      {/* Info */}
-      <div className="mt-8 card p-5">
-        <h3 className="font-semibold mb-3">How Upgrade Works</h3>
-        <ul className="space-y-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-          <li>• Select a skin you want to upgrade from</li>
-          <li>• Choose a target skin with a higher value</li>
-          <li>• Your win chance = (input price / target price) × 100%</li>
-          <li>• Win: receive the target skin's value. Lose: your skin is consumed</li>
-          <li>• All outcomes are determined by provably fair algorithms</li>
-        </ul>
+      {/* Info box */}
+      <div className="card p-5 mt-8">
+        <h3 className="font-bold mb-3">How Upgrade Works</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm" style={{ color: 'var(--text-muted)' }}>
+          <div className="flex gap-2"><span>1.</span><span>Select a skin you want to upgrade</span></div>
+          <div className="flex gap-2"><span>2.</span><span>Choose a higher-value target skin</span></div>
+          <div className="flex gap-2"><span>3.</span><span>Win chance = (input ÷ target) × 100%</span></div>
+          <div className="flex gap-2"><span>4.</span><span>Win → receive target skin. Lose → skin is gone</span></div>
+        </div>
       </div>
     </div>
   );

@@ -2,9 +2,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Skin } from '@/lib/data';
 
-interface InventoryItem extends Skin {
+export interface InventoryItem extends Skin {
   inventoryId: string;
-  openedAt: Date;
+  openedAt: string; // ISO string — Date can't persist cleanly
 }
 
 interface Store {
@@ -12,8 +12,9 @@ interface Store {
   inventory: InventoryItem[];
   addBalance: (amount: number) => void;
   deductBalance: (amount: number) => boolean;
-  addToInventory: (skin: Skin) => void;
+  addToInventory: (skin: Skin) => string; // returns inventoryId
   sellItem: (inventoryId: string, price: number) => void;
+  sellSelected: (inventoryIds: string[]) => void;
   sellAll: () => void;
 }
 
@@ -22,31 +23,46 @@ export const useStore = create<Store>()(
     (set, get) => ({
       balance: 100.00,
       inventory: [],
-      addBalance: (amount) => set((state) => ({ balance: state.balance + amount })),
+
+      addBalance: (amount) =>
+        set(s => ({ balance: Math.round((s.balance + amount) * 100) / 100 })),
+
       deductBalance: (amount) => {
         if (get().balance < amount) return false;
-        set((state) => ({ balance: state.balance - amount }));
+        set(s => ({ balance: Math.round((s.balance - amount) * 100) / 100 }));
         return true;
       },
-      addToInventory: (skin) =>
-        set((state) => ({
+
+      addToInventory: (skin) => {
+        const inventoryId = `${skin.id}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+        set(s => ({
           inventory: [
-            {
-              ...skin,
-              inventoryId: `${skin.id}-${Date.now()}-${Math.random()}`,
-              openedAt: new Date(),
-            },
-            ...state.inventory,
+            { ...skin, inventoryId, openedAt: new Date().toISOString() },
+            ...s.inventory,
           ],
-        })),
+        }));
+        return inventoryId;
+      },
+
       sellItem: (inventoryId, price) =>
-        set((state) => ({
-          balance: state.balance + price,
-          inventory: state.inventory.filter((i) => i.inventoryId !== inventoryId),
+        set(s => ({
+          balance: Math.round((s.balance + price) * 100) / 100,
+          inventory: s.inventory.filter(i => i.inventoryId !== inventoryId),
         })),
+
+      sellSelected: (inventoryIds) =>
+        set(s => {
+          const toSell = s.inventory.filter(i => inventoryIds.includes(i.inventoryId));
+          const total = toSell.reduce((sum, i) => sum + i.price, 0);
+          return {
+            balance: Math.round((s.balance + total) * 100) / 100,
+            inventory: s.inventory.filter(i => !inventoryIds.includes(i.inventoryId)),
+          };
+        }),
+
       sellAll: () =>
-        set((state) => ({
-          balance: state.balance + state.inventory.reduce((sum, i) => sum + i.price, 0),
+        set(s => ({
+          balance: Math.round((s.balance + s.inventory.reduce((sum, i) => sum + i.price, 0)) * 100) / 100,
           inventory: [],
         })),
     }),
