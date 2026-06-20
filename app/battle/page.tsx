@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { cases, rollSkin, RARITY_COLORS, Case, Skin } from '@/lib/data';
 import { useStore } from '@/store/useStore';
 import { FAKE_USERS } from '@/lib/data';
@@ -293,13 +294,13 @@ export default function BattlePage() {
                           style={{ color: p.isUser ? '#f97316' : 'var(--text-muted)' }}>
                           {p.isUser ? '👤 You' : p.name}
                         </div>
-                        <div className="h-24 rounded-xl flex items-center justify-center text-4xl mb-2 transition-all"
+                        <div className="h-24 rounded-xl flex items-center justify-center mb-2 transition-all overflow-hidden"
                           style={{
                             background: `${clr}15`,
                             border: `2px solid ${isRoundWinner ? clr : clr + '35'}`,
                             boxShadow: isRoundWinner ? `0 0 20px ${clr}40` : undefined,
                           }}>
-                          🔫
+                          <Image src={p.skin.image} alt={p.skin.name} width={90} height={65} className="object-contain" style={{ filter: `drop-shadow(0 2px 8px ${clr}60)` }} unoptimized />
                         </div>
                         <div className="text-xs font-bold truncate" style={{ color: clr, fontSize: 10 }}>
                           {p.skin.weapon} | {p.skin.name}

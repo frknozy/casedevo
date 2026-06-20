@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { cases, RARITY_COLORS, FAKE_USERS, rollSkin, Skin } from '@/lib/data';
 
 interface FeedItem {
@@ -69,9 +70,9 @@ export default function LiveFeed() {
               }}>
               <div className="flex items-center gap-2 px-2.5 py-2">
                 {/* Item icon */}
-                <div className="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center text-xl"
+                <div className="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden"
                   style={{ background: `${clr}15`, border: `1px solid ${clr}30` }}>
-                  🔫
+                  <Image src={item.skin.image} alt={item.skin.name} width={36} height={26} className="object-contain" unoptimized />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold truncate leading-tight" style={{ color: clr }}>

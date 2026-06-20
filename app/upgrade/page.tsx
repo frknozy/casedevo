@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useStore } from '@/store/useStore';
 import { RARITY_COLORS, RARITY_LABELS, cases, Skin, Rarity } from '@/lib/data';
 
@@ -34,12 +35,12 @@ function SkinPicker({ title, current, onSelect, filter }: SkinPickerProps) {
 
       {current ? (
         <div>
-          <div className="h-32 rounded-xl flex items-center justify-center text-5xl mb-3"
+          <div className="h-32 rounded-xl flex items-center justify-center mb-3 overflow-hidden"
             style={{
               background: `${RARITY_COLORS[current.rarity]}15`,
               border: `2px solid ${RARITY_COLORS[current.rarity]}50`,
             }}>
-            🔫
+            <Image src={current.image} alt={`${current.weapon} | ${current.name}`} width={130} height={95} className="object-contain" style={{ filter: `drop-shadow(0 0 12px ${RARITY_COLORS[current.rarity]}80)` }} unoptimized />
           </div>
           <div className="text-sm font-bold truncate" style={{ color: RARITY_COLORS[current.rarity] }}>
             {current.weapon} | {current.name}
@@ -83,7 +84,7 @@ function SkinPicker({ title, current, onSelect, filter }: SkinPickerProps) {
                   }}
                   onMouseEnter={e => !isActive && (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
                   onMouseLeave={e => !isActive && (e.currentTarget.style.background = 'transparent')}>
-                  <span className="text-xl flex-shrink-0">🔫</span>
+                  <Image src={skin.image} alt={skin.name} width={32} height={24} className="object-contain flex-shrink-0" unoptimized />
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-bold truncate" style={{ color: clr }}>{skin.weapon} | {skin.name}</div>
                     <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{RARITY_LABELS[skin.rarity]}</div>

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useStore, InventoryItem } from '@/store/useStore';
 import { RARITY_COLORS, RARITY_LABELS, Rarity } from '@/lib/data';
 
@@ -200,7 +201,7 @@ export default function InventoryPage() {
                           </svg>
                         )}
                       </div>
-                      <span className="text-4xl">🔫</span>
+                      <Image src={item.image} alt={`${item.weapon} | ${item.name}`} width={80} height={58} className="object-contain" style={{ filter: `drop-shadow(0 2px 6px ${clr}60)` }} unoptimized />
                     </div>
 
                     <div className="p-2.5">

@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState, useMemo } from 'react';
 import { cases, RARITY_COLORS, Rarity } from '@/lib/data';
 
@@ -164,8 +165,10 @@ export default function HomePage() {
                 style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}>
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                   style={{ background: 'radial-gradient(circle at center, rgba(249,115,22,0.2) 0%, transparent 70%)' }} />
-                {/* Case box SVG-style */}
-                <div className="relative z-10 animate-float" style={{ fontSize: 72 }}>{icon}</div>
+                {/* Case image */}
+                <div className="relative z-10 animate-float w-32 h-32 flex items-center justify-center">
+                  <Image src={c.image} alt={c.name} width={128} height={128} className="object-contain drop-shadow-2xl" unoptimized />
+                </div>
                 {/* Glow lines */}
                 <div className="absolute bottom-0 left-0 right-0 h-px opacity-30" style={{ background: `linear-gradient(90deg, transparent, ${RARITY_COLORS['covert']}, transparent)` }} />
               </div>
