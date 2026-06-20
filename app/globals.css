@@ -64,6 +64,10 @@ body {
 .rarity-glow-covert { box-shadow: 0 0 20px rgba(235,75,75,0.3); }
 .rarity-glow-extraordinary { box-shadow: 0 0 20px rgba(228,174,57,0.5); }
 
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-8px); }
