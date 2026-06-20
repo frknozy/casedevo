@@ -13,6 +13,7 @@ interface Store {
   addBalance: (amount: number) => void;
   deductBalance: (amount: number) => boolean;
   addToInventory: (skin: Skin) => string; // returns inventoryId
+  removeItem: (inventoryId: string) => void; // remove without adding balance (upgrade wager)
   sellItem: (inventoryId: string, price: number) => void;
   sellSelected: (inventoryIds: string[]) => void;
   sellAll: () => void;
@@ -43,6 +44,9 @@ export const useStore = create<Store>()(
         }));
         return inventoryId;
       },
+
+      removeItem: (inventoryId) =>
+        set(s => ({ inventory: s.inventory.filter(i => i.inventoryId !== inventoryId) })),
 
       sellItem: (inventoryId, price) =>
         set(s => ({
