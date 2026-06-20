@@ -294,10 +294,10 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
 
         {/* ── Main ── */}
         <div className="space-y-4">
-          {/* Reels */}
-          {(reels.length > 0 || !allDone) && (
+          {/* Reels — only shown once user has clicked Open */}
+          {reels.length > 0 && (
             <div className="space-y-3">
-              {(reels.length > 0 ? reels : [{ key: 0, strip: [], winner: null, inventoryId: null, done: false }]).map((reel, idx) => (
+              {reels.map((reel, idx) => (
                 <div key={reel.key} className="card overflow-hidden">
                   <div className="px-4 py-2.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
                     <span className="font-semibold text-sm">
@@ -343,7 +343,7 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
                           paddingLeft: `calc(50% - ${ITEM_W / 2}px)`,
                           paddingRight: `calc(50% - ${ITEM_W / 2}px)`,
                         }}>
-                        {(reel.strip.length > 0 ? reel.strip : sortedSkins).map((skin, i) => (
+                        {reel.strip.map((skin, i) => (
                           <SkinTile key={i} skin={skin} />
                         ))}
                       </div>

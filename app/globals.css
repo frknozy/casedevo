@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  --topbar-h: 64px;   /* header only on mobile */
   --bg-primary: #0a0e1a;
   --bg-secondary: #0d1220;
   --bg-card: #111827;
@@ -14,6 +15,11 @@
   --gold: #f59e0b;
   --green: #22c55e;
   --red: #ef4444;
+}
+
+/* Ticker becomes visible at md (768px), bumping topbar from 64→108 */
+@media (min-width: 768px) {
+  :root { --topbar-h: 108px; }
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -220,3 +226,81 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+
+/* Live ticker scroll */
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Spin number counter */
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Glow pulse for cards */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(249,115,22,0.2); }
+  50%       { box-shadow: 0 0 22px rgba(249,115,22,0.55); }
+}
+
+/* Slide down for mobile menu */
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-down { animation: slide-down 0.2s ease-out forwards; }
+
+/* Improved case card hover */
+.case-card {
+  transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1),
+              box-shadow 0.25s ease;
+}
+.case-card:hover {
+  transform: translateY(-8px) scale(1.01);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+}
+
+/* Rarity shine sweep */
+@keyframes shine {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.shine-hover {
+  background-size: 200% auto;
+  transition: background-position 0.6s ease;
+}
+.shine-hover:hover {
+  animation: shine 1.2s linear infinite;
+}
+
+/* Stats ticker number */
+.stat-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Online badge pulse */
+.online-pulse {
+  animation: online-blink 2.5s ease-in-out infinite;
+}
+@keyframes online-blink {
+  0%, 90%, 100% { opacity: 1; }
+  45% { opacity: 0.35; }
+}
+
+/* Deposit modal shake on invalid */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+.shake { animation: shake 0.3s ease-out; }
+
+/* Feed slide-in from right */
+@keyframes feed-in {
+  from { transform: translateX(60px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.feed-in { animation: feed-in 0.3s cubic-bezier(0.22,1,0.36,1) forwards; }
