@@ -44,8 +44,8 @@ function SkinTile({ skin }: { skin: Skin }) {
       style={{
         width: ITEM_W,
         height: 140,
-        background: `linear-gradient(180deg, ${c}22 0%, ${c}08 100%)`,
-        border: `2px solid ${c}55`,
+        background: `linear-gradient(180deg, ${c}40 0%, ${c}18 100%)`,
+        border: `2px solid ${c}80`,
       }}>
       <div className="flex-1 flex items-center justify-center relative overflow-hidden">
         <div className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full" style={{ background: c }} />
@@ -101,13 +101,16 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
 
   useEffect(() => { reelsRef.current = reels; }, [reels]);
 
-  // Apply reel animation after reels are committed to DOM
+  // Apply reel animation after reels are committed to DOM.
+  // Clearing animParamsRef inside the rAF (not the effect) makes this
+  // StrictMode-safe: the double-invoke cancels raf1 but params survive,
+  // so raf2 (from the second effect run) fires and applies the animation.
   useEffect(() => {
     if (!animParamsRef.current || reels.length === 0) return;
     const { duration, easing } = animParamsRef.current;
-    animParamsRef.current = null;
 
     const raf = requestAnimationFrame(() => {
+      animParamsRef.current = null; // clear after we've started
       reels.forEach((_, idx) => {
         const el = reelRefs.current[idx];
         if (!el) return;
