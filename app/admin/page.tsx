@@ -10,40 +10,50 @@ function BoostInput({ userId, initialValue, onSave }: { userId: string; initialV
   const [value, setValue] = useState(String(initialValue));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [activeBoost, setActiveBoost] = useState(initialValue);
 
   const save = async () => {
     const num = Math.max(0, Number(value) || 0);
     setSaving(true);
     const result = await onSave(userId, num);
     setSaving(false);
-    if (result.ok) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
+    if (result.ok) {
+      setActiveBoost(num);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    }
   };
 
   return (
-    <div className="flex items-center gap-1.5">
-      <div className="flex w-[100px] items-center gap-1 rounded-xl px-2 py-1.5"
-        style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid var(--border)' }}>
-        <span className="text-xs font-black" style={{ color: '#fb923c' }}>+</span>
-        <input
-          value={value}
-          onChange={e => { setValue(e.target.value); setSaved(false); }}
-          onKeyDown={e => { if (e.key === 'Enter') void save(); }}
-          type="number"
-          min="0"
-          step="1"
-          className="w-full bg-transparent text-right text-xs font-black outline-none"
-          style={{ color: 'var(--text-primary)' }}
-        />
-        <span className="text-xs font-black" style={{ color: 'var(--text-muted)' }}>%</span>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1.5">
+        <div className="flex w-[100px] items-center gap-1 rounded-xl px-2 py-1.5"
+          style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid var(--border)' }}>
+          <span className="text-xs font-black" style={{ color: '#fb923c' }}>+</span>
+          <input
+            value={value}
+            onChange={e => { setValue(e.target.value); setSaved(false); }}
+            onKeyDown={e => { if (e.key === 'Enter') void save(); }}
+            type="number"
+            min="0"
+            step="1"
+            className="w-full bg-transparent text-right text-xs font-black outline-none"
+            style={{ color: 'var(--text-primary)' }}
+          />
+          <span className="text-xs font-black" style={{ color: 'var(--text-muted)' }}>%</span>
+        </div>
+        <button
+          onClick={() => void save()}
+          disabled={saving}
+          className="rounded-lg px-2 py-1 text-xs font-black transition-all"
+          style={{ background: saved ? 'rgba(34,197,94,0.15)' : 'rgba(249,115,22,0.12)', border: `1px solid ${saved ? 'rgba(34,197,94,0.3)' : 'rgba(249,115,22,0.3)'}`, color: saved ? '#86efac' : '#fb923c' }}
+        >
+          {saving ? '…' : saved ? '✓' : 'Kaydet'}
+        </button>
       </div>
-      <button
-        onClick={() => void save()}
-        disabled={saving}
-        className="rounded-lg px-2 py-1 text-xs font-black transition-all"
-        style={{ background: saved ? 'rgba(34,197,94,0.15)' : 'rgba(249,115,22,0.12)', border: `1px solid ${saved ? 'rgba(34,197,94,0.3)' : 'rgba(249,115,22,0.3)'}`, color: saved ? '#86efac' : '#fb923c' }}
-      >
-        {saving ? '…' : saved ? '✓' : 'Kaydet'}
-      </button>
+      <span className="text-xs" style={{ color: activeBoost > 0 ? '#fb923c' : 'var(--text-muted)' }}>
+        {activeBoost > 0 ? `Aktif: +%${activeBoost}` : 'Aktif değil'}
+      </span>
     </div>
   );
 }
