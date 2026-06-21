@@ -18,10 +18,9 @@ function useOnlineCount() {
 
 export default function Header() {
   const pathname = usePathname();
-  const { balance, users, currentUserId, logout } = useStore();
+  const { balance, currentUser, currentUserId, logout } = useStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const onlineCount = useOnlineCount();
-  const currentUser = users.find((user) => user.id === currentUserId);
   const isAdmin = currentUser?.role === 'admin';
 
   const navLinks = [
