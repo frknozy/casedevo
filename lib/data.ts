@@ -176,8 +176,7 @@ export function formatChance(chance: number): string {
   return chance.toFixed(4);
 }
 
-const CDN = 'https://community.cloudflare.steamstatic.com/economy/image/';
-const img = (hash: string) => `${CDN}${hash}/360fx360f`;
+const img = (hash: string) => `/api/skin-image/${hash}/360fx360f`;
 
 // Real Steam CDN image hashes
 const HASHES: Record<string, string> = {
