@@ -31,8 +31,8 @@ const CASE_GRADS: Record<string, [string, string]> = {
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 export default function BattlePage() {
-  const { balance, deductBalance, addBalance, addToInventory, caseOverrides, recordBattle, users, currentUserId, hasHydrated } = useStore();
-  const currentUser = users.find((user) => user.id === currentUserId);
+  const { balance, deductBalance, addBalance, addToInventory, caseOverrides, recordBattle, currentUser, currentUserId, hasHydrated } = useStore();
+  
   const managedCases = useMemo(() => applyCaseOverrides(cases, caseOverrides), [caseOverrides]);
   const [selectedCaseId, setSelectedCaseId] = useState(cases[0].id);
   const [playerCount, setPlayerCount] = useState(2);

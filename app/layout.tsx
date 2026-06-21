@@ -3,6 +3,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import LiveTicker from "@/components/LiveTicker";
+import RealtimeProvider from "@/components/RealtimeProvider";
 
 export const metadata: Metadata = {
   title: "Casedevo – CS2 Kasa Açma",
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </main>
 
         <Footer />
+        <RealtimeProvider />
       </body>
     </html>
   );

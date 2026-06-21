@@ -88,8 +88,8 @@ function applyReelTransform(el: HTMLDivElement, x: number, duration?: number, ea
 export default function CasePage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
-  const { balance, deductBalance, addBalance, addToInventory, caseOverrides, recordCaseOpen, users, currentUserId, hasHydrated } = useStore();
-  const currentUser = users.find((user) => user.id === currentUserId);
+  const { balance, deductBalance, addBalance, addToInventory, caseOverrides, recordCaseOpen, currentUser, currentUserId, hasHydrated } = useStore();
+  
 
   const [qty, setQty] = useState(1);
   const [fast, setFast] = useState(false);

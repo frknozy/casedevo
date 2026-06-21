@@ -9,8 +9,8 @@ function formatDate(value: string) {
 }
 
 export default function ProfilePage() {
-  const { users, currentUserId, updateProfile, logout, hasHydrated } = useStore();
-  const currentUser = users.find((user) => user.id === currentUserId);
+  const { currentUser, currentUserId, updateProfile, logout, hasHydrated } = useStore();
+  
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState(() => ({
     username: currentUser?.username || '',
@@ -66,8 +66,8 @@ export default function ProfilePage() {
     );
   }
 
-  const save = () => {
-    const result = updateProfile(form);
+  const save = async () => {
+    const result = await updateProfile(form);
     setMessage(result.message);
   };
 
@@ -207,7 +207,7 @@ export default function ProfilePage() {
               />
             </div>
             {message && <div className="rounded-xl px-3 py-2 text-sm font-semibold text-green-300" style={{ background: 'rgba(34,197,94,0.1)' }}>{message}</div>}
-            <button onClick={save} className="btn-primary w-full justify-center">Profili Güncelle</button>
+            <button onClick={() => void save()} className="btn-primary w-full justify-center">Profili Güncelle</button>
           </div>
         </aside>
       </div>

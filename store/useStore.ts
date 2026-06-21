@@ -37,7 +37,6 @@ export interface UserAccount {
   id: string;
   username: string;
   email: string;
-  password: string;
   role: 'user' | 'admin';
   avatarColor: string;
   steamName: string;
@@ -55,12 +54,17 @@ interface Store {
   balance: number;
   inventory: InventoryItem[];
   lastDailyClaimAt: string | null;
-  users: UserAccount[];
   currentUserId: string | null;
+  currentUser: UserAccount | null;
   caseOverrides: CaseOverride[];
   liveDrops: LiveDropItem[];
   hasHydrated: boolean;
   setHasHydrated: (value: boolean) => void;
+  initialize: () => Promise<void>;
+  register: (username: string, email: string, password: string) => Promise<{ ok: boolean; message: string }>;
+  login: (usernameOrEmail: string, password: string) => Promise<{ ok: boolean; message: string }>;
+  logout: () => void;
+  updateProfile: (profile: Partial<Pick<UserAccount, 'username' | 'email' | 'steamName' | 'bio' | 'avatarColor'>>) => Promise<{ ok: boolean; message: string }>;
   addBalance: (amount: number) => void;
   deductBalance: (amount: number) => boolean;
   claimDailyBonus: (amount: number) => boolean;
@@ -69,120 +73,247 @@ interface Store {
   sellItem: (inventoryId: string, price: number) => void;
   sellSelected: (inventoryIds: string[]) => void;
   sellAll: () => void;
-  register: (username: string, email: string, password: string) => { ok: boolean; message: string };
-  login: (usernameOrEmail: string, password: string) => { ok: boolean; message: string };
-  logout: () => void;
-  updateProfile: (profile: Partial<Pick<UserAccount, 'username' | 'email' | 'steamName' | 'bio' | 'avatarColor'>>) => { ok: boolean; message: string };
-  adminAddBalanceToUser: (userId: string, amount: number) => { ok: boolean; message: string };
-  adminRemoveBalanceFromUser: (userId: string, amount: number) => { ok: boolean; message: string };
-  adminSetCaseWinBoost: (userId: string, percent: number) => { ok: boolean; message: string };
   recordCaseOpen: (caseName: string, totalCost: number, skins: Skin[]) => void;
   recordUpgrade: (won: boolean, message: string, amount?: number) => void;
   recordBattle: (won: boolean, message: string, amount: number) => void;
-  updateCaseOverride: (override: CaseOverride) => void;
-  resetCaseOverrides: () => void;
+  addLiveDropsFromServer: (drops: LiveDropItem[]) => void;
+  updateCaseOverride: (override: CaseOverride) => Promise<void>;
+  resetCaseOverrides: () => Promise<void>;
+  // Admin
+  adminAddBalanceToUser: (userId: string, amount: number) => Promise<{ ok: boolean; message: string }>;
+  adminRemoveBalanceFromUser: (userId: string, amount: number) => Promise<{ ok: boolean; message: string }>;
+  adminSetCaseWinBoost: (userId: string, percent: number) => Promise<{ ok: boolean; message: string }>;
 }
 
 const nowIso = () => new Date().toISOString();
 const money = (value: number) => Math.round(value * 100) / 100;
 
 const emptyStats = (): UserStats => ({
-  casesOpened: 0,
-  battlesPlayed: 0,
-  upgradesTried: 0,
-  bestDropValue: 0,
-  totalWonValue: 0,
-  totalCaseCost: 0,
-  totalSoldValue: 0,
+  casesOpened: 0, battlesPlayed: 0, upgradesTried: 0,
+  bestDropValue: 0, totalWonValue: 0, totalCaseCost: 0, totalSoldValue: 0,
 });
 
 const activity = (type: ActivityItem['type'], message: string, amount?: number): ActivityItem => ({
   id: `${type}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
-  type,
-  message,
-  amount,
-  createdAt: nowIso(),
+  type, message, amount, createdAt: nowIso(),
 });
 
-const createUser = (
-  username: string,
-  email: string,
-  password: string,
-  role: UserAccount['role'] = 'user',
-  balance = 100
-): UserAccount => ({
-  id: `${role}-${username.toLowerCase()}-${Date.now()}`,
-  username,
-  email,
-  password,
-  role,
-  avatarColor: role === 'admin' ? '#f97316' : '#3b82f6',
-  steamName: username,
-  bio: role === 'admin' ? 'Casedevo yönetim hesabı' : 'Casedevo oyuncusu',
-  joinedAt: nowIso(),
-  lastLoginAt: nowIso(),
-  balance,
-  caseWinBoostPercent: 0,
-  inventory: [],
-  stats: emptyStats(),
-  activities: [activity('register', `${username} hesabı oluşturuldu`)],
-});
+function dbUserToAccount(dbUser: Record<string, unknown>, inventory: InventoryItem[]): UserAccount {
+  const stats = (dbUser.stats as Record<string, number>) || {};
+  const activities = (dbUser.activities as ActivityItem[]) || [];
+  return {
+    id: dbUser.id as string,
+    username: dbUser.username as string,
+    email: dbUser.email as string,
+    role: dbUser.role as 'user' | 'admin',
+    avatarColor: (dbUser.avatar_color as string) || '#3b82f6',
+    steamName: (dbUser.steam_name as string) || '',
+    bio: (dbUser.bio as string) || '',
+    joinedAt: dbUser.joined_at as string,
+    lastLoginAt: dbUser.last_login_at as string,
+    balance: dbUser.balance as number,
+    caseWinBoostPercent: (dbUser.case_win_boost_percent as number) || 0,
+    inventory,
+    stats: {
+      casesOpened: stats.casesOpened || 0,
+      battlesPlayed: stats.battlesPlayed || 0,
+      upgradesTried: stats.upgradesTried || 0,
+      bestDropValue: stats.bestDropValue || 0,
+      totalWonValue: stats.totalWonValue || 0,
+      totalCaseCost: stats.totalCaseCost || 0,
+      totalSoldValue: stats.totalSoldValue || 0,
+    },
+    activities,
+  };
+}
 
-const adminUser: UserAccount = {
-  id: 'admin-casedevo',
-  username: 'admin',
-  email: 'admin@casedevo.local',
-  password: 'admin123',
-  role: 'admin',
-  avatarColor: '#f97316',
-  steamName: 'Casedevo Admin',
-  bio: 'Demo yönetici hesabı. Kullanıcı, kasa ve site özetlerini yönetir.',
-  joinedAt: '2026-06-21T00:00:00.000Z',
-  lastLoginAt: '2026-06-21T00:00:00.000Z',
-  balance: 1000,
-  caseWinBoostPercent: 0,
-  inventory: [],
-  stats: emptyStats(),
-  activities: [activity('register', 'Admin hesabı hazırlandı')],
-};
+function dbInventoryToItems(rows: Array<{ id: string; skin_data: unknown; opened_at: string }>): InventoryItem[] {
+  return rows.map((row) => ({
+    ...(row.skin_data as Skin),
+    inventoryId: row.id,
+    openedAt: row.opened_at,
+  }));
+}
 
-function syncCurrentUser<T extends Partial<UserAccount>>(set: (fn: (state: Store) => Partial<Store>) => void, patch: (user: UserAccount) => T) {
-  set((state) => {
-    if (!state.currentUserId) return {};
-    const users = state.users.map((user) => {
-      if (user.id !== state.currentUserId) return user;
-      return { ...user, ...patch(user) };
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleSyncToBackend(userId: string, getState: () => Store) {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    const state = getState();
+    if (!state.currentUserId) return;
+    const user = state.currentUser;
+    const inventoryAdd = state.inventory.map((item) => {
+      const { inventoryId, openedAt, ...skin } = item;
+      return { id: inventoryId, skin_data: skin };
     });
-    const current = users.find((user) => user.id === state.currentUserId);
-    return current ? { users, balance: current.balance, inventory: current.inventory } : { users };
-  });
+    await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        balance: state.balance,
+        stats: user?.stats,
+        activities: user?.activities,
+        inventoryAdd,
+      }),
+    }).catch(console.error);
+  }, 1500);
 }
 
 export const useStore = create<Store>()(
   persist(
     (set, get) => ({
-      balance: 100.00,
+      balance: 100,
       inventory: [],
       lastDailyClaimAt: null,
-      users: [adminUser],
       currentUserId: null,
+      currentUser: null,
       caseOverrides: [],
       liveDrops: [],
       hasHydrated: false,
+
       setHasHydrated: (value) => set({ hasHydrated: value }),
 
+      initialize: async () => {
+        const { currentUserId } = get();
+
+        // Load case overrides from backend
+        try {
+          const res = await fetch('/api/case-overrides');
+          if (res.ok) {
+            const data = await res.json();
+            set({ caseOverrides: data.overrides || [] });
+          }
+        } catch { /* offline */ }
+
+        // Refresh user data from backend if logged in
+        if (currentUserId) {
+          try {
+            const res = await fetch(`/api/me?userId=${currentUserId}`);
+            if (res.ok) {
+              const data = await res.json();
+              const inventoryItems = dbInventoryToItems(data.inventory || []);
+              const user = dbUserToAccount(data.user, inventoryItems);
+              set({ currentUser: user, balance: user.balance, inventory: inventoryItems });
+            } else {
+              // Session invalid — log out
+              set({ currentUserId: null, currentUser: null, balance: 100, inventory: [] });
+            }
+          } catch { /* keep local state */ }
+        }
+
+        set({ hasHydrated: true });
+      },
+
+      register: async (username, email, password) => {
+        try {
+          const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, email, password }),
+          });
+          const data = await res.json();
+          if (!data.ok) return { ok: false, message: data.message };
+
+          // Auto-login after register
+          return get().login(username, password);
+        } catch {
+          return { ok: false, message: 'Bağlantı hatası.' };
+        }
+      },
+
+      login: async (usernameOrEmail, password) => {
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usernameOrEmail, password }),
+          });
+          const data = await res.json();
+          if (!data.ok) return { ok: false, message: data.message };
+
+          const inventoryItems = dbInventoryToItems(data.inventory || []);
+          const user = dbUserToAccount(data.user, inventoryItems);
+
+          set({
+            currentUserId: user.id,
+            currentUser: user,
+            balance: user.balance,
+            inventory: inventoryItems,
+          });
+          return { ok: true, message: data.message };
+        } catch {
+          return { ok: false, message: 'Bağlantı hatası.' };
+        }
+      },
+
+      logout: () => {
+        set({ currentUserId: null, currentUser: null, balance: 100, inventory: [] });
+      },
+
+      updateProfile: async (profile) => {
+        const userId = get().currentUserId;
+        if (!userId) return { ok: false, message: 'Önce giriş yapmalısın.' };
+        try {
+          const patch: Record<string, string> = {};
+          if (profile.username) patch.username = profile.username.trim();
+          if (profile.email) patch.email = profile.email.trim().toLowerCase();
+          if (profile.steamName !== undefined) patch.steam_name = profile.steamName;
+          if (profile.bio !== undefined) patch.bio = profile.bio;
+          if (profile.avatarColor !== undefined) patch.avatar_color = profile.avatarColor;
+
+          const res = await fetch('/api/me', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, patch }),
+          });
+          const data = await res.json();
+          if (!data.ok) return { ok: false, message: data.message };
+
+          set((state) => ({
+            currentUser: state.currentUser ? {
+              ...state.currentUser,
+              username: patch.username || state.currentUser.username,
+              email: patch.email || state.currentUser.email,
+              steamName: patch.steam_name ?? state.currentUser.steamName,
+              bio: patch.bio ?? state.currentUser.bio,
+              avatarColor: patch.avatar_color || state.currentUser.avatarColor,
+            } : null,
+          }));
+          return { ok: true, message: 'Profil güncellendi.' };
+        } catch {
+          return { ok: false, message: 'Bağlantı hatası.' };
+        }
+      },
+
       addBalance: (amount) => {
-        set((state) => ({ balance: money(state.balance + amount) }));
-        syncCurrentUser(set, (user) => ({
-          balance: money(user.balance + amount),
-          activities: [activity('deposit', `$${amount.toFixed(2)} bakiye eklendi`, amount), ...user.activities].slice(0, 40),
-        }));
+        const userId = get().currentUserId;
+        set((state) => {
+          const newBalance = money(state.balance + amount);
+          const act = activity('deposit', `$${amount.toFixed(2)} bakiye eklendi`, amount);
+          return {
+            balance: newBalance,
+            currentUser: state.currentUser ? {
+              ...state.currentUser,
+              balance: newBalance,
+              activities: [act, ...state.currentUser.activities].slice(0, 40),
+            } : null,
+          };
+        });
+        if (userId) scheduleSyncToBackend(userId, get);
       },
 
       deductBalance: (amount) => {
         if (get().balance < amount) return false;
-        set((state) => ({ balance: money(state.balance - amount) }));
-        syncCurrentUser(set, (user) => ({ balance: money(user.balance - amount) }));
+        const userId = get().currentUserId;
+        set((state) => {
+          const newBalance = money(state.balance - amount);
+          return {
+            balance: newBalance,
+            currentUser: state.currentUser ? { ...state.currentUser, balance: newBalance } : null,
+          };
+        });
+        if (userId) scheduleSyncToBackend(userId, get);
         return true;
       },
 
@@ -190,321 +321,231 @@ export const useStore = create<Store>()(
         const { lastDailyClaimAt } = get();
         const now = Date.now();
         const last = lastDailyClaimAt ? new Date(lastDailyClaimAt).getTime() : 0;
-        const canClaim = now - last >= 24 * 60 * 60 * 1000;
-        if (!canClaim) return false;
+        if (now - last < 24 * 60 * 60 * 1000) return false;
 
-        set((state) => ({
-          balance: money(state.balance + amount),
-          lastDailyClaimAt: new Date(now).toISOString(),
-        }));
-        syncCurrentUser(set, (user) => ({
-          balance: money(user.balance + amount),
-          activities: [activity('deposit', `Günlük bonus alındı: $${amount.toFixed(2)}`, amount), ...user.activities].slice(0, 40),
-        }));
+        const userId = get().currentUserId;
+        set((state) => {
+          const newBalance = money(state.balance + amount);
+          const act = activity('deposit', `Günlük bonus alındı: $${amount.toFixed(2)}`, amount);
+          return {
+            balance: newBalance,
+            lastDailyClaimAt: new Date(now).toISOString(),
+            currentUser: state.currentUser ? {
+              ...state.currentUser,
+              balance: newBalance,
+              activities: [act, ...state.currentUser.activities].slice(0, 40),
+            } : null,
+          };
+        });
+        if (userId) scheduleSyncToBackend(userId, get);
         return true;
       },
 
       addToInventory: (skin) => {
         const inventoryId = `${skin.id}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-        const item = { ...skin, inventoryId, openedAt: nowIso() };
-        set((state) => ({ inventory: [item, ...state.inventory] }));
-        syncCurrentUser(set, (user) => ({ inventory: [item, ...user.inventory] }));
+        const item: InventoryItem = { ...skin, inventoryId, openedAt: nowIso() };
+        const userId = get().currentUserId;
+        set((state) => ({
+          inventory: [item, ...state.inventory],
+          currentUser: state.currentUser ? {
+            ...state.currentUser,
+            inventory: [item, ...state.currentUser.inventory],
+          } : null,
+        }));
+        if (userId) scheduleSyncToBackend(userId, get);
         return inventoryId;
       },
 
       removeItem: (inventoryId) => {
-        set((state) => ({ inventory: state.inventory.filter((item) => item.inventoryId !== inventoryId) }));
-        syncCurrentUser(set, (user) => ({ inventory: user.inventory.filter((item) => item.inventoryId !== inventoryId) }));
+        const userId = get().currentUserId;
+        set((state) => ({
+          inventory: state.inventory.filter((i) => i.inventoryId !== inventoryId),
+          currentUser: state.currentUser ? {
+            ...state.currentUser,
+            inventory: state.currentUser.inventory.filter((i) => i.inventoryId !== inventoryId),
+          } : null,
+        }));
+        if (userId) {
+          fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, inventoryRemove: [inventoryId] }),
+          }).catch(console.error);
+        }
       },
 
       sellItem: (inventoryId, price) => {
-        set((state) => ({
-          balance: money(state.balance + price),
-          inventory: state.inventory.filter((item) => item.inventoryId !== inventoryId),
-        }));
-        syncCurrentUser(set, (user) => ({
-          balance: money(user.balance + price),
-          inventory: user.inventory.filter((item) => item.inventoryId !== inventoryId),
-          stats: { ...user.stats, totalSoldValue: money(user.stats.totalSoldValue + price) },
-          activities: [activity('sell', `$${price.toFixed(2)} değerinde skin satıldı`, price), ...user.activities].slice(0, 40),
-        }));
+        const userId = get().currentUserId;
+        const act = activity('sell', `$${price.toFixed(2)} değerinde skin satıldı`, price);
+        set((state) => {
+          const newBalance = money(state.balance + price);
+          const newInventory = state.inventory.filter((i) => i.inventoryId !== inventoryId);
+          return {
+            balance: newBalance,
+            inventory: newInventory,
+            currentUser: state.currentUser ? {
+              ...state.currentUser,
+              balance: newBalance,
+              inventory: newInventory,
+              stats: { ...state.currentUser.stats, totalSoldValue: money(state.currentUser.stats.totalSoldValue + price) },
+              activities: [act, ...state.currentUser.activities].slice(0, 40),
+            } : null,
+          };
+        });
+        if (userId) {
+          fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, balance: get().balance, inventoryRemove: [inventoryId], stats: get().currentUser?.stats }),
+          }).catch(console.error);
+        }
       },
 
       sellSelected: (inventoryIds) => {
-        const toSell = get().inventory.filter((item) => inventoryIds.includes(item.inventoryId));
-        const total = money(toSell.reduce((sum, item) => sum + item.price, 0));
-        set((state) => ({
-          balance: money(state.balance + total),
-          inventory: state.inventory.filter((item) => !inventoryIds.includes(item.inventoryId)),
-        }));
-        syncCurrentUser(set, (user) => ({
-          balance: money(user.balance + total),
-          inventory: user.inventory.filter((item) => !inventoryIds.includes(item.inventoryId)),
-          stats: { ...user.stats, totalSoldValue: money(user.stats.totalSoldValue + total) },
-          activities: [activity('sell', `${toSell.length} skin satıldı`, total), ...user.activities].slice(0, 40),
-        }));
+        const toSell = get().inventory.filter((i) => inventoryIds.includes(i.inventoryId));
+        const total = money(toSell.reduce((sum, i) => sum + i.price, 0));
+        const userId = get().currentUserId;
+        const act = activity('sell', `${toSell.length} skin satıldı`, total);
+        set((state) => {
+          const newBalance = money(state.balance + total);
+          const newInventory = state.inventory.filter((i) => !inventoryIds.includes(i.inventoryId));
+          return {
+            balance: newBalance,
+            inventory: newInventory,
+            currentUser: state.currentUser ? {
+              ...state.currentUser,
+              balance: newBalance,
+              inventory: newInventory,
+              stats: { ...state.currentUser.stats, totalSoldValue: money(state.currentUser.stats.totalSoldValue + total) },
+              activities: [act, ...state.currentUser.activities].slice(0, 40),
+            } : null,
+          };
+        });
+        if (userId) {
+          fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, balance: get().balance, inventoryRemove: inventoryIds, stats: get().currentUser?.stats }),
+          }).catch(console.error);
+        }
       },
 
       sellAll: () => {
-        const total = money(get().inventory.reduce((sum, item) => sum + item.price, 0));
-        set((state) => ({
-          balance: money(state.balance + total),
-          inventory: [],
-        }));
-        syncCurrentUser(set, (user) => ({
-          balance: money(user.balance + total),
-          inventory: [],
-          stats: { ...user.stats, totalSoldValue: money(user.stats.totalSoldValue + total) },
-          activities: [activity('sell', 'Envanterdeki tüm skinler satıldı', total), ...user.activities].slice(0, 40),
-        }));
-      },
-
-      register: (username, email, password) => {
-        const cleanUsername = username.trim();
-        const cleanEmail = email.trim().toLowerCase();
-        if (cleanUsername.length < 3) return { ok: false, message: 'Kullanıcı adı en az 3 karakter olmalı.' };
-        if (!cleanEmail.includes('@')) return { ok: false, message: 'Geçerli bir e-posta gir.' };
-        if (password.length < 4) return { ok: false, message: 'Şifre en az 4 karakter olmalı.' };
-        const exists = get().users.some((user) =>
-          user.username.toLowerCase() === cleanUsername.toLowerCase() || user.email.toLowerCase() === cleanEmail
-        );
-        if (exists) return { ok: false, message: 'Bu kullanıcı adı veya e-posta zaten kayıtlı.' };
-
-        const user = createUser(cleanUsername, cleanEmail, password);
-        set((state) => ({
-          users: [user, ...state.users],
-          currentUserId: user.id,
-          balance: user.balance,
-          inventory: user.inventory,
-        }));
-        return { ok: true, message: 'Hesap oluşturuldu.' };
-      },
-
-      login: (usernameOrEmail, password) => {
-        const key = usernameOrEmail.trim().toLowerCase();
-        if (key === 'admin' && password === 'admin123') {
-          const existingAdmin = get().users.find((account) => account.id === adminUser.id);
-          const updated = {
-            ...(existingAdmin || adminUser),
-            password: 'admin123',
-            lastLoginAt: nowIso(),
-            activities: [activity('login', 'Admin hesabına giriş yapıldı'), ...(existingAdmin?.activities || adminUser.activities)].slice(0, 40),
+        const total = money(get().inventory.reduce((sum, i) => sum + i.price, 0));
+        const allIds = get().inventory.map((i) => i.inventoryId);
+        const userId = get().currentUserId;
+        const act = activity('sell', 'Envanterdeki tüm skinler satıldı', total);
+        set((state) => {
+          const newBalance = money(state.balance + total);
+          return {
+            balance: newBalance,
+            inventory: [],
+            currentUser: state.currentUser ? {
+              ...state.currentUser,
+              balance: newBalance,
+              inventory: [],
+              stats: { ...state.currentUser.stats, totalSoldValue: money(state.currentUser.stats.totalSoldValue + total) },
+              activities: [act, ...state.currentUser.activities].slice(0, 40),
+            } : null,
           };
-          set((state) => ({
-            users: [updated, ...state.users.filter((account) => account.id !== adminUser.id)],
-            currentUserId: updated.id,
-            balance: updated.balance,
-            inventory: updated.inventory,
-          }));
-          return { ok: true, message: 'Admin girişi başarılı.' };
+        });
+        if (userId) {
+          fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, balance: get().balance, inventoryRemove: allIds, stats: get().currentUser?.stats }),
+          }).catch(console.error);
         }
-        const user = get().users.find((account) =>
-          (account.username.toLowerCase() === key || account.email.toLowerCase() === key) && account.password === password
-        );
-        if (!user) return { ok: false, message: 'Kullanıcı bilgileri hatalı.' };
-
-        const updated = {
-          ...user,
-          lastLoginAt: nowIso(),
-          activities: [activity('login', 'Hesaba giriş yapıldı'), ...user.activities].slice(0, 40),
-        };
-        set((state) => ({
-          users: state.users.map((account) => account.id === updated.id ? updated : account),
-          currentUserId: updated.id,
-          balance: updated.balance,
-          inventory: updated.inventory,
-        }));
-        return { ok: true, message: 'Giriş başarılı.' };
-      },
-
-      logout: () => {
-        set({ currentUserId: null, balance: 100, inventory: [] });
-      },
-
-      updateProfile: (profile) => {
-        const currentUserId = get().currentUserId;
-        if (!currentUserId) return { ok: false, message: 'Önce giriş yapmalısın.' };
-        const username = profile.username?.trim();
-        const email = profile.email?.trim().toLowerCase();
-        const duplicate = get().users.some((user) =>
-          user.id !== currentUserId && (
-            (!!username && user.username.toLowerCase() === username.toLowerCase()) ||
-            (!!email && user.email.toLowerCase() === email)
-          )
-        );
-        if (duplicate) return { ok: false, message: 'Bu kullanıcı adı veya e-posta kullanılıyor.' };
-        set((state) => ({
-          users: state.users.map((user) => user.id === currentUserId ? {
-            ...user,
-            ...profile,
-            username: username || user.username,
-            email: email || user.email,
-            activities: [activity('login', 'Profil bilgileri güncellendi'), ...user.activities].slice(0, 40),
-          } : user),
-        }));
-        return { ok: true, message: 'Profil güncellendi.' };
-      },
-
-      adminAddBalanceToUser: (userId, amount) => {
-        const cleanAmount = money(amount);
-        const currentUser = get().users.find((user) => user.id === get().currentUserId);
-        const targetUser = get().users.find((user) => user.id === userId);
-        if (currentUser?.role !== 'admin') return { ok: false, message: 'Bu işlem için admin yetkisi gerekli.' };
-        if (!targetUser) return { ok: false, message: 'Kullanıcı bulunamadı.' };
-        if (cleanAmount <= 0) return { ok: false, message: 'Eklenecek bakiye 0’dan büyük olmalı.' };
-
-        set((state) => {
-          const users = state.users.map((user) => {
-            if (user.id === userId) {
-              return {
-                ...user,
-                balance: money(user.balance + cleanAmount),
-                activities: [
-                  activity('deposit', `Admin tarafından $${cleanAmount.toFixed(2)} bakiye eklendi`, cleanAmount),
-                  ...user.activities,
-                ].slice(0, 40),
-              };
-            }
-            if (user.id === currentUser.id) {
-              return {
-                ...user,
-                activities: [
-                  activity('admin', `${targetUser.username} hesabına $${cleanAmount.toFixed(2)} bakiye eklendi`, cleanAmount),
-                  ...user.activities,
-                ].slice(0, 40),
-              };
-            }
-            return user;
-          });
-          const selected = users.find((user) => user.id === state.currentUserId);
-          return {
-            users,
-            balance: selected?.balance ?? state.balance,
-            inventory: selected?.inventory ?? state.inventory,
-          };
-        });
-
-        return { ok: true, message: `${targetUser.username} hesabına $${cleanAmount.toFixed(2)} eklendi.` };
-      },
-
-      adminRemoveBalanceFromUser: (userId, amount) => {
-        const cleanAmount = money(amount);
-        const currentUser = get().users.find((user) => user.id === get().currentUserId);
-        const targetUser = get().users.find((user) => user.id === userId);
-        if (currentUser?.role !== 'admin') return { ok: false, message: 'Bu işlem için admin yetkisi gerekli.' };
-        if (!targetUser) return { ok: false, message: 'Kullanıcı bulunamadı.' };
-        if (cleanAmount <= 0) return { ok: false, message: 'Çıkarılacak bakiye 0’dan büyük olmalı.' };
-        if (targetUser.balance < cleanAmount) return { ok: false, message: 'Kullanıcının bakiyesi bu tutar için yetersiz.' };
-
-        set((state) => {
-          const users = state.users.map((user) => {
-            if (user.id === userId) {
-              return {
-                ...user,
-                balance: money(user.balance - cleanAmount),
-                activities: [
-                  activity('admin', `Admin tarafından $${cleanAmount.toFixed(2)} bakiye çıkarıldı`, -cleanAmount),
-                  ...user.activities,
-                ].slice(0, 40),
-              };
-            }
-            if (user.id === currentUser.id) {
-              return {
-                ...user,
-                activities: [
-                  activity('admin', `${targetUser.username} hesabından $${cleanAmount.toFixed(2)} bakiye çıkarıldı`, -cleanAmount),
-                  ...user.activities,
-                ].slice(0, 40),
-              };
-            }
-            return user;
-          });
-          const selected = users.find((user) => user.id === state.currentUserId);
-          return {
-            users,
-            balance: selected?.balance ?? state.balance,
-            inventory: selected?.inventory ?? state.inventory,
-          };
-        });
-
-        return { ok: true, message: `${targetUser.username} hesabından $${cleanAmount.toFixed(2)} çıkarıldı.` };
-      },
-
-      adminSetCaseWinBoost: (userId, percent) => {
-        const currentUser = get().users.find((user) => user.id === get().currentUserId);
-        const targetUser = get().users.find((user) => user.id === userId);
-        const cleanPercent = Math.max(0, Math.round((Number(percent) || 0) * 100) / 100);
-        if (currentUser?.role !== 'admin') return { ok: false, message: 'Bu işlem için admin yetkisi gerekli.' };
-        if (!targetUser) return { ok: false, message: 'Kullanıcı bulunamadı.' };
-
-        set((state) => {
-          const users = state.users.map((user) => {
-            if (user.id === userId) {
-              return { ...user, caseWinBoostPercent: cleanPercent };
-            }
-            if (user.id === currentUser.id) {
-              return {
-                ...user,
-                activities: [
-                  activity('admin', `${targetUser.username} kasa avantajı +%${cleanPercent.toFixed(2)} olarak ayarlandı`),
-                  ...user.activities,
-                ].slice(0, 40),
-              };
-            }
-            return user;
-          });
-          const selected = users.find((user) => user.id === state.currentUserId);
-          return {
-            users,
-            balance: selected?.balance ?? state.balance,
-            inventory: selected?.inventory ?? state.inventory,
-          };
-        });
-
-        return { ok: true, message: `${targetUser.username} için gizli kasa avantajı +%${cleanPercent.toFixed(2)} oldu.` };
       },
 
       recordCaseOpen: (caseName, totalCost, skins) => {
-        const wonValue = money(skins.reduce((sum, skin) => sum + skin.price, 0));
-        const currentUser = get().users.find((user) => user.id === get().currentUserId);
+        const userId = get().currentUserId;
+        const username = get().currentUser?.username || 'Oyuncu';
         const createdAt = nowIso();
-        const newDrops = skins.map((skin, index) => ({
+        const newDrops: LiveDropItem[] = skins.map((skin, index) => ({
           id: `drop-${Date.now()}-${index}-${Math.floor(Math.random() * 1e6)}`,
-          user: currentUser?.username || 'Oyuncu',
+          user: username,
           caseName,
           skin,
           createdAt,
         }));
+
+        set((state) => {
+          const wonValue = money(skins.reduce((sum, s) => sum + s.price, 0));
+          const act = activity('case-open', `${caseName} açıldı`, -totalCost);
+          const user = state.currentUser;
+          return {
+            liveDrops: [...newDrops, ...state.liveDrops].slice(0, 60),
+            currentUser: user ? {
+              ...user,
+              stats: {
+                ...user.stats,
+                casesOpened: user.stats.casesOpened + skins.length,
+                bestDropValue: Math.max(user.stats.bestDropValue, ...skins.map((s) => s.price)),
+                totalWonValue: money(user.stats.totalWonValue + wonValue),
+                totalCaseCost: money((user.stats.totalCaseCost || 0) + totalCost),
+              },
+              activities: [act, ...user.activities].slice(0, 40),
+            } : null,
+          };
+        });
+
+        // Push live drops to backend (realtime for other users)
         if (newDrops.length > 0) {
-          set((state) => ({ liveDrops: [...newDrops, ...state.liveDrops].slice(0, 60) }));
+          const dbDrops = newDrops.map((d) => ({
+            id: d.id,
+            user_id: userId || null,
+            username: d.user,
+            case_name: d.caseName,
+            skin_data: d.skin,
+            created_at: d.createdAt,
+          }));
+          fetch('/api/live-drops', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ drops: dbDrops }),
+          }).catch(console.error);
         }
-        syncCurrentUser(set, (user) => ({
-          stats: {
-            ...user.stats,
-            casesOpened: user.stats.casesOpened + skins.length,
-            bestDropValue: Math.max(user.stats.bestDropValue, ...skins.map((skin) => skin.price)),
-            totalWonValue: money(user.stats.totalWonValue + wonValue),
-            totalCaseCost: money((user.stats.totalCaseCost || 0) + totalCost),
-          },
-          activities: [activity('case-open', `${caseName} açıldı`, -totalCost), ...user.activities].slice(0, 40),
-        }));
+
+        if (userId) scheduleSyncToBackend(userId, get);
       },
 
       recordUpgrade: (won, message, amount) => {
-        syncCurrentUser(set, (user) => ({
-          stats: { ...user.stats, upgradesTried: user.stats.upgradesTried + 1 },
-          activities: [activity('upgrade', message, amount ?? (won ? 1 : 0)), ...user.activities].slice(0, 40),
+        const userId = get().currentUserId;
+        const act = activity('upgrade', message, amount ?? (won ? 1 : 0));
+        set((state) => ({
+          currentUser: state.currentUser ? {
+            ...state.currentUser,
+            stats: { ...state.currentUser.stats, upgradesTried: state.currentUser.stats.upgradesTried + 1 },
+            activities: [act, ...state.currentUser.activities].slice(0, 40),
+          } : null,
         }));
+        if (userId) scheduleSyncToBackend(userId, get);
       },
 
       recordBattle: (won, message, amount) => {
-        syncCurrentUser(set, (user) => ({
-          stats: { ...user.stats, battlesPlayed: user.stats.battlesPlayed + 1 },
-          activities: [activity('battle', message, won ? amount : -amount), ...user.activities].slice(0, 40),
+        const userId = get().currentUserId;
+        const act = activity('battle', message, won ? amount : -amount);
+        set((state) => ({
+          currentUser: state.currentUser ? {
+            ...state.currentUser,
+            stats: { ...state.currentUser.stats, battlesPlayed: state.currentUser.stats.battlesPlayed + 1 },
+            activities: [act, ...state.currentUser.activities].slice(0, 40),
+          } : null,
         }));
+        if (userId) scheduleSyncToBackend(userId, get);
       },
 
-      updateCaseOverride: (override) => {
+      addLiveDropsFromServer: (drops) => {
+        set((state) => {
+          const existingIds = new Set(state.liveDrops.map((d) => d.id));
+          const newDrops = drops.filter((d) => !existingIds.has(d.id));
+          if (newDrops.length === 0) return {};
+          return { liveDrops: [...newDrops, ...state.liveDrops].slice(0, 60) };
+        });
+      },
+
+      updateCaseOverride: async (override) => {
         set((state) => {
           const exists = state.caseOverrides.some((item) => item.id === override.id);
           const caseOverrides = exists
@@ -512,39 +553,85 @@ export const useStore = create<Store>()(
             : [...state.caseOverrides, override];
           return { caseOverrides };
         });
-        syncCurrentUser(set, (user) => ({
-          activities: [activity('admin', `${override.id} kasa ayarı güncellendi`), ...user.activities].slice(0, 40),
-        }));
+        const userId = get().currentUserId;
+        if (userId) {
+          fetch('/api/case-overrides', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, override }),
+          }).catch(console.error);
+        }
       },
 
-      resetCaseOverrides: () => {
+      resetCaseOverrides: async () => {
         set({ caseOverrides: [] });
-        syncCurrentUser(set, (user) => ({
-          activities: [activity('admin', 'Kasa ayarları varsayılana döndü'), ...user.activities].slice(0, 40),
-        }));
+        const userId = get().currentUserId;
+        if (userId) {
+          fetch('/api/case-overrides', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId }),
+          }).catch(console.error);
+        }
+      },
+
+      adminAddBalanceToUser: async (userId, amount) => {
+        const requesterId = get().currentUserId;
+        if (!requesterId) return { ok: false, message: 'Giriş yapmalısın.' };
+        try {
+          const res = await fetch('/api/users', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requesterId, targetUserId: userId, action: 'add_balance', amount }),
+          });
+          return await res.json();
+        } catch {
+          return { ok: false, message: 'Bağlantı hatası.' };
+        }
+      },
+
+      adminRemoveBalanceFromUser: async (userId, amount) => {
+        const requesterId = get().currentUserId;
+        if (!requesterId) return { ok: false, message: 'Giriş yapmalısın.' };
+        try {
+          const res = await fetch('/api/users', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requesterId, targetUserId: userId, action: 'remove_balance', amount }),
+          });
+          return await res.json();
+        } catch {
+          return { ok: false, message: 'Bağlantı hatası.' };
+        }
+      },
+
+      adminSetCaseWinBoost: async (userId, percent) => {
+        const requesterId = get().currentUserId;
+        if (!requesterId) return { ok: false, message: 'Giriş yapmalısın.' };
+        try {
+          const res = await fetch('/api/users', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requesterId, targetUserId: userId, action: 'set_boost', percent }),
+          });
+          return await res.json();
+        } catch {
+          return { ok: false, message: 'Bağlantı hatası.' };
+        }
       },
     }),
     {
       name: 'casedevo-store',
       partialize: (state) => ({
+        currentUserId: state.currentUserId,
+        lastDailyClaimAt: state.lastDailyClaimAt,
+        // Keep local balance/inventory as fallback while loading from backend
         balance: state.balance,
         inventory: state.inventory,
-        lastDailyClaimAt: state.lastDailyClaimAt,
-        users: state.users,
-        currentUserId: state.currentUserId,
-        caseOverrides: state.caseOverrides,
-        liveDrops: state.liveDrops,
       }),
-      merge: (persisted, current) => {
-        const persistedState = persisted as Partial<Store> | undefined;
-        const users = (persistedState?.users?.some((user) => user.id === adminUser.id)
-          ? persistedState.users
-          : [adminUser, ...(persistedState?.users || [])]
-        )?.map((user) => ({ ...user, caseWinBoostPercent: user.caseWinBoostPercent ?? 0 }));
-        return { ...current, ...persistedState, users, liveDrops: persistedState?.liveDrops || [] };
-      },
       onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true);
+        // Don't set hasHydrated here — initialize() will do it after backend fetch
+        state?.initialize();
       },
     }
   )

@@ -2,15 +2,15 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { applyCaseOverrides, cases, Case, formatChance, getCaseSkinChance, RARITY_COLORS, RARITY_LABELS } from '@/lib/data';
-import { useStore } from '@/store/useStore';
+import { useStore, UserAccount } from '@/store/useStore';
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
-function getCaseProfitSummary(user: ReturnType<typeof useStore.getState>['users'][number]) {
+function getCaseProfitSummary(user: UserAccount) {
   const fallbackCost = user.activities
     .filter((activity) => activity.type === 'case-open')
     .reduce((sum, activity) => sum + Math.abs(activity.amount || 0), 0);
@@ -22,9 +22,10 @@ function getCaseProfitSummary(user: ReturnType<typeof useStore.getState>['users'
 }
 
 export default function AdminPage() {
-  const { users, currentUserId, caseOverrides, updateCaseOverride, resetCaseOverrides, hasHydrated, adminAddBalanceToUser, adminRemoveBalanceFromUser, adminSetCaseWinBoost } = useStore();
-  const currentUser = users.find((user) => user.id === currentUserId);
+  const { currentUserId, currentUser, caseOverrides, updateCaseOverride, resetCaseOverrides, hasHydrated, adminAddBalanceToUser, adminRemoveBalanceFromUser, adminSetCaseWinBoost } = useStore();
   const isAdmin = currentUser?.role === 'admin';
+  const [users, setUsers] = useState<UserAccount[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
   const [balanceUserId, setBalanceUserId] = useState('');
   const [balanceAmount, setBalanceAmount] = useState('');
   const [balanceMessage, setBalanceMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -32,6 +33,18 @@ export default function AdminPage() {
   const managedCases = useMemo(() => applyCaseOverrides(cases, caseOverrides), [caseOverrides]);
   const managedCasesById = useMemo(() => new Map(managedCases.map((caseItem) => [caseItem.id, caseItem])), [managedCases]);
   const overridesById = useMemo(() => new Map(caseOverrides.map((item) => [item.id, item])), [caseOverrides]);
+
+  useEffect(() => {
+    if (!currentUserId || !isAdmin) return;
+    setUsersLoading(true);
+    fetch(`/api/users?requesterId=${currentUserId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok) setUsers(data.users);
+      })
+      .catch(console.error)
+      .finally(() => setUsersLoading(false));
+  }, [currentUserId, isAdmin]);
 
   const totalBalance = users.reduce((sum, user) => sum + user.balance, 0);
   const totalInventory = users.reduce((sum, user) => sum + user.inventory.length, 0);
@@ -108,14 +121,23 @@ export default function AdminPage() {
     updateCase(caseItem, { skinChances: {} });
   };
 
-  const submitBalance = (action: 'add' | 'remove') => {
+  const submitBalance = async (action: 'add' | 'remove') => {
     const targetUserId = balanceUserId || users[0]?.id || '';
     const amount = Number(balanceAmount);
     const result = action === 'add'
-      ? adminAddBalanceToUser(targetUserId, amount)
-      : adminRemoveBalanceFromUser(targetUserId, amount);
+      ? await adminAddBalanceToUser(targetUserId, amount)
+      : await adminRemoveBalanceFromUser(targetUserId, amount);
     setBalanceMessage({ ok: result.ok, text: result.message });
-    if (result.ok) setBalanceAmount('');
+    if (result.ok) {
+      setBalanceAmount('');
+      // Refresh user list
+      if (currentUserId) {
+        fetch(`/api/users?requesterId=${currentUserId}`)
+          .then((res) => res.json())
+          .then((data) => { if (data.ok) setUsers(data.users); })
+          .catch(console.error);
+      }
+    }
   };
 
   return (
@@ -132,14 +154,14 @@ export default function AdminPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={resetCaseOverrides} className="btn-secondary">Kasa Ayarlarını Sıfırla</button>
+          <button onClick={() => void resetCaseOverrides()} className="btn-secondary">Kasa Ayarlarını Sıfırla</button>
           <Link href="/profile" className="btn-primary" style={{ textDecoration: 'none' }}>Admin Profili</Link>
         </div>
       </div>
 
       <div className="mb-6 grid gap-3 md:grid-cols-5">
         {[
-          ['Kullanıcı', users.length.toString()],
+          ['Kullanıcı', usersLoading ? '…' : users.length.toString()],
           ['Toplam Bakiye', `$${totalBalance.toFixed(2)}`],
           ['Envanter Eşyası', totalInventory.toString()],
           ['Açılan Kasa', totalCasesOpened.toString()],
@@ -308,11 +330,6 @@ export default function AdminPage() {
                       <td className="px-5 py-3">
                         <div className="font-bold">{user.username}</div>
                         <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{user.email}</div>
-                        <div className="mt-1 inline-flex max-w-[210px] items-center gap-1 rounded-lg px-2 py-1 text-[11px]"
-                          style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.18)', color: '#fed7aa' }}>
-                          <span className="font-black" style={{ color: '#fb923c' }}>Şifre:</span>
-                          <span className="truncate font-mono">{user.password}</span>
-                        </div>
                       </td>
                       <td className="px-5 py-3">
                         <span className="rounded-full px-2 py-1 text-xs font-black" style={{ background: user.role === 'admin' ? 'rgba(249,115,22,0.12)' : 'rgba(59,130,246,0.12)', color: user.role === 'admin' ? '#fb923c' : '#93c5fd' }}>
@@ -354,7 +371,7 @@ export default function AdminPage() {
                           <span className="text-xs font-black" style={{ color: '#fb923c' }}>+</span>
                           <input
                             value={user.caseWinBoostPercent ?? 0}
-                            onChange={(event) => adminSetCaseWinBoost(user.id, Number(event.target.value))}
+                            onChange={(event) => void adminSetCaseWinBoost(user.id, Number(event.target.value))}
                             type="number"
                             min="0"
                             step="1"
@@ -432,11 +449,11 @@ export default function AdminPage() {
               )}
 
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => submitBalance('add')} className="btn-primary justify-center">
+                <button onClick={() => void submitBalance('add')} className="btn-primary justify-center">
                   Bakiye Ekle
                 </button>
                 <button
-                  onClick={() => submitBalance('remove')}
+                  onClick={() => void submitBalance('remove')}
                   className="justify-center rounded-lg px-4 py-2.5 text-sm font-black transition-all"
                   style={{
                     background: 'rgba(239,68,68,0.12)',

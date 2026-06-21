@@ -271,8 +271,8 @@ function TargetPicker({
 }
 
 export default function UpgradePage() {
-  const { addToInventory, removeItem, caseOverrides, recordUpgrade, users, currentUserId, hasHydrated } = useStore();
-  const currentUser = users.find((user) => user.id === currentUserId);
+  const { addToInventory, removeItem, caseOverrides, recordUpgrade, currentUser, currentUserId, hasHydrated } = useStore();
+  
   const managedCases = useMemo(() => applyCaseOverrides(cases, caseOverrides), [caseOverrides]);
   const siteSkins = useMemo(() => buildSiteSkins(managedCases), [managedCases]);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);

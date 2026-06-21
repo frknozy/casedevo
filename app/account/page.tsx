@@ -5,20 +5,23 @@ import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 
 export default function AccountPage() {
-  const { register, login, users, currentUserId, hasHydrated } = useStore();
-  const currentUser = users.find((user) => user.id === currentUserId);
+  const { register, login, currentUser, hasHydrated } = useStore();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const submit = (formValues?: { username: string; email: string; password: string }) => {
+  const submit = async (formValues?: { username: string; email: string; password: string }) => {
     const values = formValues || { username, email, password };
+    setLoading(true);
+    setMessage(null);
     const result = mode === 'login'
-      ? login(values.username || values.email, values.password)
-      : register(values.username, values.email, values.password);
+      ? await login(values.username || values.email, values.password)
+      : await register(values.username, values.email, values.password);
     setMessage({ ok: result.ok, text: result.message });
+    setLoading(false);
   };
 
   if (!hasHydrated) {
@@ -41,13 +44,13 @@ export default function AccountPage() {
               style={{ background: 'rgba(34,197,94,0.12)', color: '#86efac', border: '1px solid rgba(34,197,94,0.26)' }}>
               Oturum Açık
             </div>
-            <h1 className="text-4xl font-black">Hoş geldin, {currentUser.username}</h1>
+            <h1 className="text-4xl font-black">Hoş geldin, {currentUser!.username}</h1>
             <p className="mt-3 max-w-2xl text-sm" style={{ color: 'var(--text-muted)' }}>
               Hesabın aktif. Profil istatistiklerini, envanter değerini ve son aktivitelerini profil sekmesinden takip edebilirsin.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link href="/profile" className="btn-primary" style={{ textDecoration: 'none' }}>Profile Git</Link>
-              {currentUser.role === 'admin' && (
+              {currentUser!.role === 'admin' && (
                 <Link href="/admin" className="btn-secondary" style={{ textDecoration: 'none' }}>Admin Paneli</Link>
               )}
             </div>
@@ -124,7 +127,7 @@ export default function AccountPage() {
           onSubmit={(event) => {
             event.preventDefault();
             const formData = new FormData(event.currentTarget);
-            submit({
+            void submit({
               username: String(formData.get('username') || ''),
               email: String(formData.get('email') || ''),
               password: String(formData.get('password') || ''),
@@ -183,8 +186,8 @@ export default function AccountPage() {
             </div>
           )}
 
-          <button type="submit" className="btn-primary w-full justify-center py-3">
-            {mode === 'login' ? 'Giriş Yap' : 'Hesap Oluştur'}
+          <button type="submit" className="btn-primary w-full justify-center py-3" disabled={loading}>
+            {loading ? 'Lütfen bekle…' : mode === 'login' ? 'Giriş Yap' : 'Hesap Oluştur'}
           </button>
         </form>
       </section>

@@ -10,8 +10,8 @@ type SortOpt = 'newest' | 'oldest' | 'price-high' | 'price-low' | 'rarity';
 const RARITY_ORDER: Rarity[] = ['extraordinary', 'covert', 'classified', 'restricted', 'milspec', 'industrial', 'consumer'];
 
 export default function InventoryPage() {
-  const { inventory, balance, sellItem, sellSelected, sellAll, users, currentUserId, hasHydrated } = useStore();
-  const currentUser = users.find((user) => user.id === currentUserId);
+  const { inventory, balance, sellItem, sellSelected, sellAll, currentUser, currentUserId, hasHydrated } = useStore();
+  
   const [sort, setSort] = useState<SortOpt>('newest');
   const [rarityFilter, setRarityFilter] = useState('all');
   const [search, setSearch] = useState('');

@@ -151,8 +151,8 @@ function CaseCard({
 }
 
 export default function HomePage() {
-  const { balance, claimDailyBonus, lastDailyClaimAt, caseOverrides, users, currentUserId } = useStore();
-  const currentUser = users.find((user) => user.id === currentUserId);
+  const { balance, claimDailyBonus, lastDailyClaimAt, caseOverrides, currentUser, currentUserId } = useStore();
+  
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
