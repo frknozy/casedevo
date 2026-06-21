@@ -360,6 +360,7 @@ export default function AdminPage() {
                     <th className="px-5 py-3">Envanter</th>
                     <th className="px-5 py-3">Açılan Kasa</th>
                     <th className="px-5 py-3">Gizli Avantaj</th>
+                    <th className="px-5 py-3">Şifre</th>
                     <th className="px-5 py-3">Son Giriş</th>
                     <th className="px-5 py-3">İşlemler</th>
                   </tr>
@@ -424,6 +425,9 @@ export default function AdminPage() {
                         <div className="mt-1 text-[10px]" style={{ color: 'var(--text-muted)' }}>
                           Sadece admin görür
                         </div>
+                      </td>
+                      <td className="px-5 py-3 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {user.passwordPlain || <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </td>
                       <td className="px-5 py-3" style={{ color: 'var(--text-muted)' }}>{formatDate(user.lastLoginAt)}</td>
                       <td className="px-5 py-3">

@@ -37,6 +37,7 @@ export interface UserAccount {
   id: string;
   username: string;
   email: string;
+  passwordPlain?: string;
   role: 'user' | 'admin';
   avatarColor: string;
   steamName: string;
@@ -106,6 +107,7 @@ function dbUserToAccount(dbUser: Record<string, unknown>, inventory: InventoryIt
     username: dbUser.username as string,
     email: dbUser.email as string,
     role: dbUser.role as 'user' | 'admin',
+    passwordPlain: (dbUser.password_plain as string) || undefined,
     avatarColor: (dbUser.avatar_color as string) || '#3b82f6',
     steamName: (dbUser.steam_name as string) || '',
     bio: (dbUser.bio as string) || '',

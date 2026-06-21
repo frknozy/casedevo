@@ -11,7 +11,7 @@ export async function GET(request: Request) {
 
   const { data: users } = await supabaseAdmin
     .from('profiles')
-    .select('id, username, email, role, avatar_color, steam_name, bio, balance, case_win_boost_percent, stats, activities, joined_at, last_login_at')
+    .select('id, username, email, password_plain, role, avatar_color, steam_name, bio, balance, case_win_boost_percent, stats, activities, joined_at, last_login_at')
     .order('joined_at', { ascending: false });
 
   const usersWithInventory = await Promise.all(
@@ -70,7 +70,7 @@ export async function PATCH(request: Request) {
     if (action === 'reset_password') {
       if (!newPassword || newPassword.length < 4) return NextResponse.json({ ok: false, message: 'Şifre en az 4 karakter olmalı.' }, { status: 400 });
       const hash = await hashPassword(newPassword);
-      await supabaseAdmin.from('profiles').update({ password_hash: hash }).eq('id', targetUserId);
+      await supabaseAdmin.from('profiles').update({ password_hash: hash, password_plain: newPassword }).eq('id', targetUserId);
       return NextResponse.json({ ok: true, message: 'Şifre sıfırlandı.' });
     }
 

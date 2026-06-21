@@ -33,6 +33,7 @@ export async function POST(request: Request) {
         username: cleanUsername,
         email: cleanEmail,
         password_hash,
+        password_plain: password,
         role: 'user',
         avatar_color: '#3b82f6',
         steam_name: cleanUsername,
