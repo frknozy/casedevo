@@ -1,54 +1,21 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { cases, RARITY_COLORS, FAKE_USERS, rollSkin, Skin } from '@/lib/data';
+import { RARITY_COLORS } from '@/lib/data';
+import { useStore } from '@/store/useStore';
 
-interface FeedItem {
-  id: string;
-  user: string;
-  skin: Skin;
-  caseName: string;
-  ts: number;
-}
-
-function randomItem(): FeedItem {
-  const c = cases[Math.floor(Math.random() * cases.length)];
-  return {
-    id: Math.random().toString(36).slice(2),
-    user: FAKE_USERS[Math.floor(Math.random() * FAKE_USERS.length)],
-    skin: rollSkin(c.skins),
-    caseName: c.name,
-    ts: Date.now(),
-  };
-}
-
-function timeAgo(ts: number) {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 5) return 'just now';
-  if (s < 60) return `${s}s ago`;
-  return `${Math.floor(s / 60)}m ago`;
+function timeAgo(value: string) {
+  const seconds = Math.floor((Date.now() - new Date(value).getTime()) / 1000);
+  if (seconds < 5) return 'az önce';
+  if (seconds < 60) return `${seconds} sn önce`;
+  return `${Math.floor(seconds / 60)} dk önce`;
 }
 
 export default function LiveFeed() {
-  const [items, setItems] = useState<FeedItem[]>([]);
-  const [newId, setNewId] = useState<string | null>(null);
+  const liveDrops = useStore((state) => state.liveDrops);
   const [, tick] = useState(0);
+  const totalValue = liveDrops.reduce((sum, drop) => sum + drop.skin.price, 0);
 
-  useEffect(() => {
-    setItems(Array.from({ length: 18 }, randomItem));
-  }, []);
-
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const item = randomItem();
-      setNewId(item.id);
-      setItems(prev => [item, ...prev.slice(0, 28)]);
-      setTimeout(() => setNewId(null), 600);
-    }, 1800 + Math.random() * 1200);
-    return () => clearInterval(iv);
-  }, []);
-
-  // Update relative timestamps
   useEffect(() => {
     const iv = setInterval(() => tick(t => t + 1), 10000);
     return () => clearInterval(iv);
@@ -66,35 +33,40 @@ export default function LiveFeed() {
         backdropFilter: 'blur(12px)',
       }}
     >
-      {/* Header */}
-      <div
-        className="flex items-center gap-2 px-3 py-2.5 flex-shrink-0"
-        style={{ borderBottom: '1px solid var(--border)' }}
-      >
-        <span className="w-2 h-2 rounded-full bg-green-400 online-pulse flex-shrink-0" />
-        <span className="text-xs font-black tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>
-          Live Drops
+      <div className="flex flex-shrink-0 items-center gap-2 px-3 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
+        <span className="h-2 w-2 flex-shrink-0 rounded-full bg-green-400 online-pulse" />
+        <span className="text-xs font-black uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+          Gerçek Droplar
         </span>
         <span
-          className="ml-auto text-xs px-1.5 py-0.5 rounded font-bold"
+          className="ml-auto rounded px-1.5 py-0.5 text-xs font-bold"
           style={{
-            background: 'rgba(34,197,94,0.12)',
-            color: '#22c55e',
-            border: '1px solid rgba(34,197,94,0.25)',
+            background: liveDrops.length > 0 ? 'rgba(34,197,94,0.12)' : 'rgba(249,115,22,0.12)',
+            color: liveDrops.length > 0 ? '#22c55e' : '#fb923c',
+            border: `1px solid ${liveDrops.length > 0 ? 'rgba(34,197,94,0.25)' : 'rgba(249,115,22,0.25)'}`,
           }}
         >
-          LIVE
+          {liveDrops.length > 0 ? 'LIVE' : 'BEKLİYOR'}
         </span>
       </div>
 
-      {/* Feed list */}
       <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-        {items.map((item) => {
-          const clr = RARITY_COLORS[item.skin.rarity];
-          const isNew = item.id === newId;
+        {liveDrops.length === 0 ? (
+          <div className="px-4 py-10 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl text-2xl" style={{ background: 'rgba(249,115,22,0.12)' }}>
+              ✦
+            </div>
+            <div className="text-sm font-black">Henüz gerçek drop yok</div>
+            <p className="mt-2 text-xs leading-5" style={{ color: 'var(--text-muted)' }}>
+              Kullanıcı kasa açtığında kazanan skinler burada anlık görünecek.
+            </p>
+          </div>
+        ) : liveDrops.map((drop, index) => {
+          const clr = RARITY_COLORS[drop.skin.rarity];
+          const isNew = index === 0;
           return (
             <div
-              key={item.id}
+              key={drop.id}
               className={isNew ? 'feed-in' : ''}
               style={{
                 borderBottom: '1px solid rgba(255,255,255,0.03)',
@@ -104,65 +76,42 @@ export default function LiveFeed() {
               }}
             >
               <div className="flex items-center gap-2.5 px-2.5 py-2.5">
-                {/* Skin image */}
                 <div
-                  className="w-11 h-11 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden"
+                  className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg"
                   style={{
                     background: `linear-gradient(135deg, ${clr}18, ${clr}08)`,
                     border: `1px solid ${clr}28`,
                   }}
                 >
-                  <Image
-                    src={item.skin.image}
-                    alt={item.skin.name}
-                    width={38}
-                    height={28}
-                    className="object-contain"
-                    unoptimized
-                  />
+                  <Image src={drop.skin.image} alt={drop.skin.name} width={38} height={28} className="object-contain" unoptimized />
                 </div>
 
-                {/* Info */}
                 <div className="min-w-0 flex-1">
-                  <div
-                    className="text-xs font-bold truncate leading-tight"
-                    style={{ color: clr }}
-                  >
-                    {item.skin.weapon}
+                  <div className="truncate text-xs font-bold leading-tight" style={{ color: clr }}>
+                    {drop.skin.weapon}
                   </div>
-                  <div
-                    className="text-xs truncate leading-tight"
-                    style={{ color: 'var(--text-primary)', fontSize: 10, fontWeight: 600 }}
-                  >
-                    {item.skin.name}
+                  <div className="truncate text-xs font-semibold leading-tight" style={{ color: 'var(--text-primary)', fontSize: 10 }}>
+                    {drop.skin.name}
                   </div>
-                  <div className="flex items-center justify-between mt-0.5">
-                    <span className="font-black text-yellow-400" style={{ fontSize: 11 }}>
-                      ${item.skin.price.toFixed(2)}
-                    </span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 9 }}>
-                      {timeAgo(item.ts)}
-                    </span>
+                  <div className="mt-0.5 flex items-center justify-between">
+                    <span className="font-black text-yellow-400" style={{ fontSize: 11 }}>${drop.skin.price.toFixed(2)}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 9 }}>{timeAgo(drop.createdAt)}</span>
                   </div>
                 </div>
               </div>
 
-              {/* User row */}
-              <div
-                className="px-2.5 pb-2 flex items-center gap-1.5"
-                style={{ marginTop: -4 }}
-              >
+              <div className="flex items-center gap-1.5 px-2.5 pb-2" style={{ marginTop: -4 }}>
                 <div
-                  className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-white flex-shrink-0"
+                  className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full text-white"
                   style={{ background: `${clr}60`, fontSize: 7, fontWeight: 900 }}
                 >
-                  {item.user[0]}
+                  {drop.user[0]}
                 </div>
-                <span className="text-xs truncate" style={{ color: 'var(--text-muted)', fontSize: 9 }}>
-                  {item.user}
+                <span className="truncate text-xs" style={{ color: 'var(--text-muted)', fontSize: 9 }}>
+                  {drop.user}
                 </span>
-                <span className="ml-auto text-xs flex-shrink-0" style={{ color: 'var(--text-muted)', fontSize: 9 }}>
-                  {item.caseName.split(' ')[0]}
+                <span className="ml-auto flex-shrink-0 text-xs" style={{ color: 'var(--text-muted)', fontSize: 9 }}>
+                  {drop.caseName.split(' ')[0]}
                 </span>
               </div>
             </div>
@@ -170,14 +119,10 @@ export default function LiveFeed() {
         })}
       </div>
 
-      {/* Footer */}
-      <div
-        className="flex-shrink-0 px-3 py-2 text-center"
-        style={{ borderTop: '1px solid var(--border)' }}
-      >
+      <div className="flex-shrink-0 px-3 py-2 text-center" style={{ borderTop: '1px solid var(--border)' }}>
         <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          Total dropped today:{' '}
-          <span className="text-yellow-400 font-bold">$284,192</span>
+          Gerçek drop toplamı:{' '}
+          <span className="font-bold text-yellow-400">${totalValue.toFixed(2)}</span>
         </div>
       </div>
     </aside>

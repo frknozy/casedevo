@@ -1,356 +1,301 @@
 'use client';
-import Link from 'next/link';
+
 import Image from 'next/image';
-import { useState, useMemo } from 'react';
-import { cases, RARITY_COLORS, Rarity } from '@/lib/data';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { applyCaseOverrides, cases, RARITY_COLORS, Rarity } from '@/lib/data';
+import { useStore } from '@/store/useStore';
+
+const DAILY_BONUS = 100;
 
 const TAG_STYLES: Record<string, { bg: string; color: string; border: string }> = {
-  HOT:         { bg: 'rgba(239,68,68,0.15)',   color: '#f87171', border: 'rgba(239,68,68,0.4)' },
-  NEW:         { bg: 'rgba(59,130,246,0.15)',  color: '#60a5fa', border: 'rgba(59,130,246,0.4)' },
-  'BEST VALUE':{ bg: 'rgba(34,197,94,0.15)',   color: '#4ade80', border: 'rgba(34,197,94,0.4)' },
+  HOT: { bg: 'rgba(249,115,22,0.14)', color: '#fb923c', border: 'rgba(249,115,22,0.34)' },
+  NEW: { bg: 'rgba(96,165,250,0.14)', color: '#93c5fd', border: 'rgba(96,165,250,0.34)' },
+  'BEST VALUE': { bg: 'rgba(74,222,128,0.14)', color: '#86efac', border: 'rgba(74,222,128,0.34)' },
+};
+
+const TAG_LABELS: Record<string, string> = {
+  HOT: 'POPÜLER',
+  NEW: 'YENİ',
+  'BEST VALUE': 'EN AVANTAJLI',
 };
 
 const CASE_GRADS: Record<string, [string, string]> = {
-  revolution:          ['#1a0a2e', '#3d1b7a'],
-  kilowatt:            ['#0a1a2e', '#0d3b7a'],
-  'dreams-nightmares': ['#1a0a2e', '#4b0d80'],
-  fracture:            ['#2e0a0a', '#7a1a1a'],
-  prisma2:             ['#0a2e18', '#1a7a3b'],
-  snakebite:           ['#0a2e1a', '#0d6e2d'],
-  recoil:              ['#1a1a2e', '#2d2d7a'],
-  clutch:              ['#2e1a0a', '#7a3b0d'],
-  horizon:             ['#0a1a2e', '#0d4a7a'],
+  revolution: ['#1a2340', '#263d77'],
+  kilowatt: ['#19203f', '#1f5399'],
+  'dreams-nightmares': ['#261840', '#5a2e88'],
+  fracture: ['#351c29', '#73344c'],
+  prisma2: ['#152c28', '#28705f'],
+  snakebite: ['#18281b', '#2b6b37'],
+  recoil: ['#1a2140', '#394e98'],
+  clutch: ['#352217', '#6f4126'],
+  horizon: ['#172639', '#2b5c87'],
 };
 
-function RarityBar({ skins }: { skins: Array<{ rarity: Rarity }> }) {
+function formatCountdown(ms: number) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return `${hours} sa ${minutes.toString().padStart(2, '0')} dk`;
+}
+
+function RarityBar({ rarities }: { rarities: Rarity[] }) {
   const counts: Record<string, number> = {};
-  skins.forEach(s => { counts[s.rarity] = (counts[s.rarity] || 0) + 1; });
-  const total = skins.length;
-  const order: Rarity[] = ['extraordinary','covert','classified','restricted','milspec','industrial','consumer'];
+  rarities.forEach((rarity) => {
+    counts[rarity] = (counts[rarity] || 0) + 1;
+  });
+  const order: Rarity[] = ['extraordinary', 'covert', 'classified', 'restricted', 'milspec', 'industrial', 'consumer'];
+  const total = rarities.length;
+
   return (
-    <div className="flex h-1 w-full rounded-full overflow-hidden gap-px">
-      {order.filter(r => counts[r]).map(r => (
+    <div className="flex h-1 w-full overflow-hidden rounded-full gap-px">
+      {order.filter((rarity) => counts[rarity]).map((rarity) => (
         <div
-          key={r}
-          style={{ width: `${(counts[r] / total) * 100}%`, background: RARITY_COLORS[r] }}
+          key={rarity}
+          style={{
+            width: `${(counts[rarity] / total) * 100}%`,
+            background: RARITY_COLORS[rarity],
+          }}
         />
       ))}
     </div>
   );
 }
 
-export default function HomePage() {
-  const [search, setSearch] = useState('');
-  const [sort, setSort] = useState<'default' | 'price-asc' | 'price-desc'>('default');
-  const [priceFilter, setPriceFilter] = useState('all');
-
-  const filtered = useMemo(() => {
-    let res = [...cases];
-    if (search) res = res.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
-    if (priceFilter === 'under1') res = res.filter(c => c.price < 1);
-    if (priceFilter === '1-3')    res = res.filter(c => c.price >= 1 && c.price < 3);
-    if (priceFilter === 'over3')  res = res.filter(c => c.price >= 3);
-    if (sort === 'price-asc')  res.sort((a, b) => a.price - b.price);
-    if (sort === 'price-desc') res.sort((a, b) => b.price - a.price);
-    return res;
-  }, [search, sort, priceFilter]);
+function CaseCard({
+  id,
+  name,
+  image,
+  price,
+  tag,
+  skins,
+}: {
+  id: string;
+  name: string;
+  image: string;
+  price: number;
+  tag?: string;
+  skins: Array<{ rarity: Rarity }>;
+}) {
+  const [from, to] = CASE_GRADS[id] || ['#182138', '#30457d'];
+  const badge = tag ? TAG_STYLES[tag] : null;
+  const tagLabel = tag ? TAG_LABELS[tag] || tag : null;
 
   return (
-    <div className="max-w-[1136px] mx-auto px-4 py-8">
-
-      {/* ── Hero ── */}
+    <Link
+      href={`/case/${id}`}
+      className="group relative overflow-hidden rounded-[30px] no-underline"
+      style={{
+        background: 'linear-gradient(180deg, rgba(20,24,39,0.98), rgba(19,26,42,0.98))',
+        border: '1px solid rgba(255,255,255,0.05)',
+        boxShadow: '0 18px 48px rgba(0,0,0,0.28)',
+      }}
+    >
       <div
-        className="relative rounded-2xl overflow-hidden mb-8"
-        style={{
-          background: 'linear-gradient(135deg, #0c1526 0%, #16082a 40%, #0c1526 100%)',
-          border: '1px solid var(--border)',
-          minHeight: 200,
-        }}
-      >
-        {/* Background blobs */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute inset-0" style={{
-            backgroundImage:
-              'radial-gradient(ellipse 50% 70% at 10% 50%, rgba(249,115,22,0.18) 0%, transparent 60%),' +
-              'radial-gradient(ellipse 50% 70% at 90% 50%, rgba(136,71,255,0.18) 0%, transparent 60%)',
-          }} />
-          {/* Grid lines */}
-          <div className="absolute inset-0 opacity-[0.03]" style={{
-            backgroundImage:
-              'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px),' +
-              'linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
-            backgroundSize: '40px 40px',
-          }} />
+        className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+        style={{ background: 'radial-gradient(circle at 50% 28%, rgba(139,92,246,0.18), transparent 62%)' }}
+      />
+
+      {badge && (
+        <div
+          className="absolute right-5 top-5 z-10 rounded-full px-3 py-1 text-[11px] font-black tracking-[0.16em]"
+          style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}
+        >
+          {tagLabel}
+        </div>
+      )}
+
+      <div className="relative z-10 p-5">
+        <div
+          className="relative mb-5 flex h-[255px] items-center justify-center overflow-hidden rounded-[24px]"
+          style={{
+            background: `linear-gradient(180deg, ${from} 0%, ${to} 100%)`,
+            border: '1px solid rgba(255,255,255,0.05)',
+          }}
+        >
+          <div
+            className="absolute inset-x-8 bottom-5 h-10 rounded-full blur-2xl"
+            style={{ background: 'rgba(255,255,255,0.12)' }}
+          />
+          <Image
+            src={image}
+            alt={name}
+            width={220}
+            height={220}
+            className="relative z-10 object-contain transition-transform duration-500 group-hover:scale-[1.05]"
+            style={{ filter: 'drop-shadow(0 16px 28px rgba(0,0,0,0.55))' }}
+            unoptimized
+          />
         </div>
 
-        <div className="relative z-10 flex items-center justify-between px-8 py-10 gap-6">
-          <div className="max-w-md">
-            <div
-              className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full text-xs font-bold"
-              style={{
-                background: 'rgba(249,115,22,0.15)',
-                border: '1px solid rgba(249,115,22,0.4)',
-                color: '#fb923c',
-              }}
-            >
-              🔥 BEST CS2 CASE OPENING
+        <RarityBar rarities={skins.map((skin) => skin.rarity)} />
+
+        <div className="mt-4 text-center">
+          <div className="text-[15px] font-black uppercase tracking-[0.08em] text-white">
+            {name.replace(' Case', '')}
+          </div>
+          <div
+            className="mt-4 inline-flex rounded-2xl border px-4 py-2 text-[22px] font-black leading-none text-[#101827]"
+            style={{
+              background: '#ffffff',
+              borderColor: 'rgba(255,255,255,0.74)',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
+            }}
+          >
+            ${price.toFixed(2)}
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+export default function HomePage() {
+  const { balance, claimDailyBonus, lastDailyClaimAt, caseOverrides, users, currentUserId } = useStore();
+  const currentUser = users.find((user) => user.id === currentUserId);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 60000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const nextClaimIn = useMemo(() => {
+    if (!lastDailyClaimAt) return 0;
+    const remaining = 24 * 60 * 60 * 1000 - (now - new Date(lastDailyClaimAt).getTime());
+    return Math.max(0, remaining);
+  }, [lastDailyClaimAt, now]);
+
+  const canClaimDaily = nextClaimIn === 0;
+
+  const managedCases = useMemo(() => applyCaseOverrides(cases, caseOverrides), [caseOverrides]);
+  const featuredCases = useMemo(() => managedCases.slice(0, 5), [managedCases]);
+  const premiumCases = useMemo(() => managedCases.slice(5), [managedCases]);
+  return (
+    <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-6">
+      <section
+        className="relative overflow-hidden rounded-[34px] border"
+        style={{
+          backgroundImage:
+            "linear-gradient(90deg, rgba(7,10,20,0.98) 0%, rgba(7,10,20,0.9) 38%, rgba(7,10,20,0.54) 68%, rgba(7,10,20,0.82) 100%), url('/site-hero-casedevo.png')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          borderColor: 'rgba(255,255,255,0.06)',
+          boxShadow: '0 30px 80px rgba(0,0,0,0.32)',
+        }}
+      >
+        <div className="absolute inset-0 opacity-[0.18]" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)' }} />
+
+        <div className="relative z-10 px-6 pb-8 pt-8 md:px-10 md:pt-10">
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3 rounded-full px-4 py-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <span className="text-sm text-violet-300">✦</span>
+              <span className="text-sm font-bold text-violet-200">Premium kasa deneyimi</span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-black mb-3 leading-[1.1]">
-              Open Cases,<br />
-              <span className="gradient-text">Win Skins</span>
-            </h1>
-            <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
-              Provably fair · Instant results · Thousands of skins waiting
-            </p>
-            <div className="flex items-center gap-3 flex-wrap">
-              <a href="#cases" className="btn-primary">Open Cases Now</a>
-              <Link href="/provably-fair" className="btn-secondary no-underline text-sm" style={{ textDecoration: 'none' }}>
-                How It Works
+
+            {currentUser ? (
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl px-4 py-3 text-sm font-semibold text-slate-200" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  Bakiye <span className="ml-2 font-black text-white">${balance.toFixed(2)}</span>
+                </div>
+                <button onClick={() => claimDailyBonus(DAILY_BONUS)} disabled={!canClaimDaily} className="btn-primary rounded-2xl px-5 py-3 text-sm">
+                  {canClaimDaily ? 'Bonus Al' : formatCountdown(nextClaimIn)}
+                </button>
+              </div>
+            ) : (
+              <Link href="/account" className="btn-primary rounded-2xl px-5 py-3 text-sm" style={{ textDecoration: 'none' }}>
+                Giriş / Kayıt
               </Link>
+            )}
+          </div>
+
+          <div className="relative overflow-hidden rounded-[30px] border px-6 py-8 md:px-8 md:py-10"
+            style={{
+              background: 'linear-gradient(135deg, rgba(8,12,24,0.86), rgba(12,18,35,0.62))',
+              borderColor: 'rgba(255,255,255,0.05)',
+            }}>
+            <div className="absolute -left-16 top-10 h-48 w-48 rounded-full blur-3xl" style={{ background: 'rgba(139,92,246,0.2)' }} />
+            <div className="absolute right-0 top-0 h-full w-[38%] opacity-80" style={{
+              background: 'radial-gradient(circle at 40% 40%, rgba(139,92,246,0.22), transparent 38%), radial-gradient(circle at 70% 60%, rgba(59,130,246,0.18), transparent 34%)',
+            }} />
+            <div className="absolute right-12 top-12 h-56 w-56 rounded-full border" style={{ borderColor: 'rgba(139,92,246,0.12)' }} />
+            <div className="absolute right-24 bottom-10 h-40 w-40 rounded-full border" style={{ borderColor: 'rgba(59,130,246,0.12)' }} />
+
+            <div className="relative z-10 max-w-[720px]">
+              <h1 className="text-[54px] font-black leading-[0.95] text-white md:text-[78px]">
+                Şansını Konuştur,
+                <span className="mt-2 block bg-gradient-to-r from-violet-300 via-violet-500 to-blue-400 bg-clip-text text-transparent">
+                  Efsaneleri Yakala!
+                </span>
+              </h1>
+              <p className="mt-6 max-w-[520px] text-xl leading-8 text-slate-300">
+                En değerli skinleri kazanmak için kasaları aç, şansını zirveye taşıyacak premium bir kasa açma deneyimine gir.
+              </p>
+
+              <div className="mt-8 flex flex-wrap gap-4">
+                <a href="#cases" className="btn-primary rounded-2xl px-8 py-4 text-base">
+                  Kasalara Göz At
+                </a>
+                <Link href="/upgrade" className="btn-secondary rounded-2xl px-8 py-4 text-base no-underline" style={{ textDecoration: 'none' }}>
+                  Yükselt
+                </Link>
+              </div>
             </div>
           </div>
 
-          {/* Floating case preview */}
-          <div className="hidden lg:flex flex-col gap-3">
-            {cases.slice(0, 3).map((c, i) => (
+          <div className="mt-8 grid gap-3 md:grid-cols-4">
+            {[
+              { title: '%100 Güvenli', desc: 'Adil sistem, şeffaf sonuçlar', icon: '🛡️' },
+              { title: 'Günlük Bonus', desc: 'Her gün ücretsiz ödüller', icon: '🎁' },
+              { title: 'Hızlı Çekim', desc: 'Anında skin çekim imkanı', icon: '⚡' },
+              { title: '7/24 Destek', desc: 'Kesintisiz destek ekibi', icon: '🎧' },
+            ].map((item) => (
               <div
-                key={c.id}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  animationDelay: `${i * 0.4}s`,
-                  animation: 'float 3s ease-in-out infinite',
-                }}
+                key={item.title}
+                className="rounded-[24px] px-5 py-5"
+                style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}
               >
-                <Image src={c.image} alt={c.name} width={36} height={36} className="object-contain" unoptimized />
-                <div>
-                  <div className="text-xs font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{c.name}</div>
-                  <div className="text-xs font-black text-yellow-400">${c.price.toFixed(2)}</div>
-                </div>
+                <div className="mb-3 text-2xl">{item.icon}</div>
+                <div className="text-lg font-black text-white">{item.title}</div>
+                <div className="mt-1 text-sm text-slate-400">{item.desc}</div>
               </div>
             ))}
           </div>
         </div>
+      </section>
 
-        {/* Stats bar */}
-        <div
-          className="relative z-10 border-t grid grid-cols-3 divide-x"
-          style={{ borderColor: 'rgba(255,255,255,0.06)' }}
-        >
-          {[
-            { icon: '📦', label: 'Cases Opened', value: '2,418,552' },
-            { icon: '💰', label: 'Skins Won',    value: '$8,241,039' },
-            { icon: '👥', label: 'Active Players', value: '143,892' },
-          ].map(stat => (
-            <div key={stat.label} className="flex items-center gap-2.5 px-6 py-3" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-              <span className="text-xl flex-shrink-0">{stat.icon}</span>
-              <div>
-                <div className="font-black text-base gradient-text stat-value">{stat.value}</div>
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{stat.label}</div>
-              </div>
-            </div>
+      <section id="cases" className="mt-10">
+        <div className="mb-5 flex items-end justify-between gap-4">
+          <div>
+            <div className="text-xs font-black tracking-[0.3em] text-slate-500">ÖNE ÇIKAN KASALAR</div>
+            <h2 className="mt-2 text-4xl font-black text-white md:text-5xl">Premium kasa koleksiyonu</h2>
+          </div>
+          <div className="hidden rounded-full px-4 py-2 text-sm font-semibold text-slate-300 md:block" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            Büyük açılışlar için özenle seçildi
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-5">
+          {featuredCases.map((caseItem) => (
+            <CaseCard key={caseItem.id} {...caseItem} />
           ))}
         </div>
-      </div>
 
-      {/* ── Filters ── */}
-      <div id="cases" className="mb-5">
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Search — takes available space */}
-          <div className="relative" style={{ minWidth: 220, flex: '1 1 220px', maxWidth: 400 }}>
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search cases…"
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-            />
+        <div className="my-10 flex items-center gap-4">
+          <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.44))' }} />
+          <div className="text-center">
+            <div className="text-xs font-black tracking-[0.3em] text-slate-500">PREMIUM</div>
+            <div className="mt-1 text-3xl font-black text-white">Üst seviye seçimler</div>
           </div>
-
-          {/* Price filter */}
-          <select
-            value={priceFilter}
-            onChange={e => setPriceFilter(e.target.value)}
-            className="text-sm px-3 py-2.5 rounded-xl outline-none flex-shrink-0"
-            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-          >
-            <option value="all">All Prices</option>
-            <option value="under1">Under $1</option>
-            <option value="1-3">$1 – $3</option>
-            <option value="over3">Over $3</option>
-          </select>
-
-          {/* Sort */}
-          <select
-            value={sort}
-            onChange={e => setSort(e.target.value as typeof sort)}
-            className="text-sm px-3 py-2.5 rounded-xl outline-none flex-shrink-0"
-            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-          >
-            <option value="default">Default Order</option>
-            <option value="price-asc">Price: Low → High</option>
-            <option value="price-desc">Price: High → Low</option>
-          </select>
-
-          <span className="text-sm font-semibold ml-auto flex-shrink-0" style={{ color: 'var(--text-muted)' }}>
-            {filtered.length} case{filtered.length !== 1 ? 's' : ''}
-          </span>
+          <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, rgba(139,92,246,0.44), transparent)' }} />
         </div>
-      </div>
 
-      {/* ── Case Grid ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-        {filtered.map(c => {
-          const [from, to] = CASE_GRADS[c.id] || ['#1a1a2e', '#2d2d7a'];
-          const topSkins = c.skins.filter(s => s.rarity === 'extraordinary' || s.rarity === 'covert');
-          const tag = c.tag ? TAG_STYLES[c.tag] : null;
-
-          return (
-            <Link
-              key={c.id}
-              href={`/case/${c.id}`}
-              className="case-card group relative overflow-hidden rounded-xl flex flex-col"
-              style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border)',
-                textDecoration: 'none',
-              }}
-            >
-              {/* Tag */}
-              {tag && (
-                <div
-                  className="absolute top-2.5 right-2.5 z-10 text-xs font-bold px-2 py-0.5 rounded-full"
-                  style={{ background: tag.bg, color: tag.color, border: `1px solid ${tag.border}` }}
-                >
-                  {c.tag}
-                </div>
-              )}
-
-              {/* Case image area */}
-              <div
-                className="relative flex items-center justify-center overflow-hidden"
-                style={{
-                  height: 168,
-                  background: `linear-gradient(145deg, ${from} 0%, ${to} 100%)`,
-                }}
-              >
-                {/* Hover radial glow */}
-                <div
-                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                  style={{ background: 'radial-gradient(circle at center, rgba(249,115,22,0.22) 0%, transparent 70%)' }}
-                />
-
-                {/* Case image */}
-                <div className="relative z-10 animate-float">
-                  <Image
-                    src={c.image}
-                    alt={c.name}
-                    width={130}
-                    height={130}
-                    className="object-contain drop-shadow-2xl"
-                    style={{ filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.6))' }}
-                    unoptimized
-                  />
-                </div>
-
-                {/* Bottom rarity line */}
-                <div className="absolute bottom-0 left-0 right-0 h-px" style={{
-                  background: `linear-gradient(90deg, transparent, ${RARITY_COLORS['covert']}60, transparent)`,
-                }} />
-              </div>
-
-              {/* Info */}
-              <div className="p-3 flex flex-col flex-1">
-                <h3 className="font-bold text-sm mb-1.5 truncate group-hover:text-orange-400 transition-colors">
-                  {c.name}
-                </h3>
-
-                <RarityBar skins={c.skins} />
-
-                {/* Top skin badges */}
-                <div className="mt-2 flex gap-1 flex-wrap min-h-[18px]">
-                  {topSkins.slice(0, 2).map(s => (
-                    <span
-                      key={s.id}
-                      className="text-xs px-1.5 py-0.5 rounded"
-                      style={{
-                        background: `${RARITY_COLORS[s.rarity]}12`,
-                        color: RARITY_COLORS[s.rarity],
-                        border: `1px solid ${RARITY_COLORS[s.rarity]}28`,
-                        fontSize: 9,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {s.weapon}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Price row */}
-                <div className="flex items-center justify-between mt-auto pt-3">
-                  <span className="font-black text-xl text-yellow-400">${c.price.toFixed(2)}</span>
-                  <span
-                    className="px-3 py-1 rounded-lg text-xs font-bold transition-all translate-y-1 opacity-0 group-hover:opacity-100 group-hover:translate-y-0"
-                    style={{ background: 'linear-gradient(135deg,#f97316,#ea580c)', color: 'white' }}
-                  >
-                    Open →
-                  </span>
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-
-      {filtered.length === 0 && (
-        <div className="card p-16 text-center mt-4">
-          <div className="text-5xl mb-4">🔍</div>
-          <h3 className="font-bold text-lg mb-1">No cases found</h3>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Try adjusting your filters</p>
-        </div>
-      )}
-
-      {/* ── How it works ── */}
-      <div className="mt-16">
-        <h2 className="text-2xl font-black mb-1 text-center">How It Works</h2>
-        <p className="text-center mb-8 text-sm" style={{ color: 'var(--text-muted)' }}>
-          Start opening in under a minute
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[
-            { icon: '💳', title: 'Deposit Funds',   desc: 'Add balance instantly. No minimums, no fees.',         color: '#f97316' },
-            { icon: '📦', title: 'Choose a Case',   desc: 'Pick from official CS2 cases with real item pools.',   color: '#8847ff' },
-            { icon: '🎉', title: 'Win & Cash Out',  desc: 'Open cases, win skins, sell directly for balance.',    color: '#22c55e' },
-          ].map((s, i) => (
-            <div key={i} className="card p-6 text-center relative overflow-hidden">
-              <div className="absolute inset-0 opacity-5" style={{ background: `radial-gradient(circle at 50% 0%, ${s.color}, transparent 70%)` }} />
-              <div className="text-4xl mb-3">{s.icon}</div>
-              <div className="text-xs font-black tracking-widest mb-2" style={{ color: s.color }}>STEP {i + 1}</div>
-              <h3 className="font-bold text-base mb-2">{s.title}</h3>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{s.desc}</p>
-            </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {premiumCases.map((caseItem) => (
+            <CaseCard key={caseItem.id} {...caseItem} />
           ))}
         </div>
-      </div>
-
-      {/* ── Trust badges ── */}
-      <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { icon: '🔐', label: 'Provably Fair' },
-          { icon: '⚡', label: 'Instant Results' },
-          { icon: '💰', label: 'Best Prices' },
-          { icon: '🎮', label: 'CS2 Official Cases' },
-        ].map(f => (
-          <div key={f.label} className="card p-4 flex items-center gap-3">
-            <span className="text-2xl">{f.icon}</span>
-            <span className="font-semibold text-sm">{f.label}</span>
-          </div>
-        ))}
-      </div>
+      </section>
     </div>
   );
 }

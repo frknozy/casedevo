@@ -5,13 +5,13 @@ import Footer from "@/components/Footer";
 import LiveTicker from "@/components/LiveTicker";
 
 export const metadata: Metadata = {
-  title: "CaseHug – CS2 Case Opening",
-  description: "Open CS2 cases and win rare skins on CaseHug. Provably fair, instant results.",
+  title: "Casedevo – CS2 Kasa Açma",
+  description: "Casedevo'da CS2 kasaları aç, nadir skinler kazan. Provably fair sistem, anında sonuçlar.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="tr">
       <body>
         {/* Fixed top bar: header (64px) + ticker (44px on md+) */}
         <div className="fixed top-0 left-0 right-0 z-50 flex flex-col">

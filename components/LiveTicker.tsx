@@ -1,101 +1,101 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { cases, RARITY_COLORS, FAKE_USERS, rollSkin, Skin } from '@/lib/data';
+import { useMemo, useState } from 'react';
+import { RARITY_COLORS } from '@/lib/data';
+import { useStore } from '@/store/useStore';
 
-interface TickerItem {
-  id: string;
-  user: string;
-  skin: Skin;
-  caseName: string;
-}
-
-function randomItem(): TickerItem {
-  const c = cases[Math.floor(Math.random() * cases.length)];
-  return {
-    id: Math.random().toString(36).slice(2),
-    user: FAKE_USERS[Math.floor(Math.random() * FAKE_USERS.length)],
-    skin: rollSkin(c.skins),
-    caseName: c.name,
-  };
-}
+type DropView = 'all' | 'valuable';
 
 export default function LiveTicker() {
-  const [items, setItems] = useState<TickerItem[]>([]);
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setItems(Array.from({ length: 30 }, randomItem));
-  }, []);
-
-  // Add new item periodically
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setItems(prev => [randomItem(), ...prev.slice(0, 35)]);
-    }, 2200);
-    return () => clearInterval(iv);
-  }, []);
-
-  if (items.length === 0) return null;
-
-  // Duplicate for seamless loop
-  const doubled = [...items, ...items];
+  const liveDrops = useStore((state) => state.liveDrops);
+  const [view, setView] = useState<DropView>('all');
+  const visibleDrops = useMemo(() => {
+    if (view === 'all') return liveDrops;
+    return liveDrops.filter((drop) =>
+      drop.skin.price >= 10 ||
+      drop.skin.rarity === 'classified' ||
+      drop.skin.rarity === 'covert' ||
+      drop.skin.rarity === 'extraordinary'
+    );
+  }, [liveDrops, view]);
 
   return (
     <div
-      className="w-full overflow-hidden border-b flex-shrink-0"
+      className="flex w-full flex-shrink-0 overflow-hidden border-b"
       style={{
         background: 'rgba(8,12,24,0.95)',
         borderColor: 'var(--border)',
         height: 44,
       }}
     >
-      <div
-        ref={trackRef}
-        className="flex items-center h-full"
-        style={{
-          animation: 'ticker-scroll 60s linear infinite',
-          width: 'max-content',
-          gap: 0,
-        }}
-      >
-        {doubled.map((item, i) => {
-          const clr = RARITY_COLORS[item.skin.rarity];
+      <div className="flex h-full flex-shrink-0 items-center gap-1 border-r px-2" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        {[
+          { id: 'all' as const, label: 'Tümü' },
+          { id: 'valuable' as const, label: 'Değerli' },
+        ].map((item) => {
+          const active = view === item.id;
           return (
-            <div
-              key={`${item.id}-${i}`}
-              className="flex items-center gap-2 px-3 h-full flex-shrink-0"
+            <button
+              key={item.id}
+              onClick={() => setView(item.id)}
+              className="rounded-lg px-2.5 py-1 text-[10px] font-black transition-all"
               style={{
-                borderRight: '1px solid rgba(255,255,255,0.05)',
-                minWidth: 180,
+                background: active ? 'rgba(249,115,22,0.16)' : 'rgba(255,255,255,0.04)',
+                color: active ? '#fb923c' : 'var(--text-muted)',
+                border: `1px solid ${active ? 'rgba(249,115,22,0.34)' : 'rgba(255,255,255,0.06)'}`,
               }}
             >
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: `${clr}18`, border: `1px solid ${clr}35` }}
-              >
-                <Image
-                  src={item.skin.image}
-                  alt={item.skin.name}
-                  width={28}
-                  height={20}
-                  className="object-contain"
-                  unoptimized
-                />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold truncate leading-tight" style={{ color: clr, maxWidth: 110, fontSize: 10 }}>
-                  {item.skin.weapon} | {item.skin.name}
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-black text-yellow-400" style={{ fontSize: 10 }}>${item.skin.price.toFixed(2)}</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: 9 }}>· {item.user.split(' ')[0]}</span>
-                </div>
-              </div>
-            </div>
+              {item.label}
+            </button>
           );
         })}
       </div>
+
+      {liveDrops.length === 0 ? (
+        <div className="flex h-full flex-1 items-center justify-center gap-2 px-4 text-xs font-bold" style={{ color: 'var(--text-muted)' }}>
+          <span className="h-2 w-2 rounded-full bg-orange-400" />
+          Gerçek canlı droplar animasyon tamamlandıktan sonra burada görünecek.
+        </div>
+      ) : visibleDrops.length === 0 ? (
+        <div className="flex h-full flex-1 items-center justify-center gap-2 px-4 text-xs font-bold" style={{ color: 'var(--text-muted)' }}>
+          <span className="h-2 w-2 rounded-full bg-yellow-400" />
+          Henüz değerli drop yok.
+        </div>
+      ) : (
+        <div
+          className="live-drop-strip flex h-full flex-1 items-center overflow-x-auto overflow-y-hidden"
+          style={{
+            gap: 0,
+          }}
+        >
+          {visibleDrops.map((drop) => {
+            const clr = RARITY_COLORS[drop.skin.rarity];
+            return (
+              <div
+                key={drop.id}
+                className="flex h-full min-w-[210px] flex-shrink-0 items-center gap-2 px-3"
+                style={{ borderRight: '1px solid rgba(255,255,255,0.05)' }}
+              >
+                <div
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg"
+                  style={{ background: `${clr}18`, border: `1px solid ${clr}35` }}
+                >
+                  <Image src={drop.skin.image} alt={drop.skin.name} width={28} height={20} className="object-contain" unoptimized />
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-bold leading-tight" style={{ color: clr, maxWidth: 132, fontSize: 10 }}>
+                    {drop.skin.weapon} | {drop.skin.name}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-black text-yellow-400" style={{ fontSize: 10 }}>${drop.skin.price.toFixed(2)}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 9 }}>· {drop.user}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

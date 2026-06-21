@@ -13,39 +13,24 @@ function useOnlineCount() {
     }, 3000);
     return () => clearInterval(iv);
   }, []);
-  return count.toLocaleString();
+  return new Intl.NumberFormat('en-US').format(count);
 }
 
 export default function Header() {
   const pathname = usePathname();
-  const { balance, addBalance } = useStore();
-  const [showDeposit, setShowDeposit] = useState(false);
-  const [depositAmount, setDepositAmount] = useState('');
+  const { balance, users, currentUserId, logout } = useStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const onlineCount = useOnlineCount();
-
-  useEffect(() => {
-    const handler = () => setShowDeposit(true);
-    window.addEventListener('open-deposit', handler);
-    return () => window.removeEventListener('open-deposit', handler);
-  }, []);
-
-  // Close mobile menu on route change
-  useEffect(() => { setMobileOpen(false); }, [pathname]);
+  const currentUser = users.find((user) => user.id === currentUserId);
+  const isAdmin = currentUser?.role === 'admin';
 
   const navLinks = [
-    { href: '/', label: 'Cases' },
-    { href: '/upgrade', label: 'Upgrade' },
-    { href: '/battle', label: 'Case Battle' },
+    { href: '/', label: 'Kasalar' },
+    { href: '/upgrade', label: 'Yükselt' },
+    { href: '/battle', label: 'Kasa Savaşı' },
     { href: '/provably-fair', label: 'Provably Fair' },
+    { href: currentUser ? '/profile' : '/account', label: currentUser ? 'Profil' : 'Hesap' },
   ];
-
-  const handleDeposit = (amount: number) => {
-    if (amount <= 0) return;
-    addBalance(amount);
-    setShowDeposit(false);
-    setDepositAmount('');
-  };
 
   return (
     <>
@@ -63,22 +48,40 @@ export default function Header() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 flex-shrink-0" style={{ textDecoration: 'none' }}>
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-sm select-none flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #f97316, #dc4e0a)' }}
+              className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 shadow-lg shadow-orange-500/20"
+              style={{ background: 'linear-gradient(135deg, #ff7a18 0%, #f43f5e 54%, #7c3aed 100%)' }}
             >
-              CH
+              <span className="absolute -right-2 -top-2 h-5 w-5 rounded-full bg-white/24 blur-sm" />
+              <span className="relative flex h-full w-full items-center justify-center text-sm font-black text-white">
+                CD
+              </span>
             </div>
             <span className="font-black text-xl tracking-tight hidden sm:block">
-              case<span className="gradient-text">hug</span>
+              case<span className="gradient-text">devo</span>
             </span>
           </Link>
 
-          {/* Online count */}
-          <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full flex-shrink-0"
-            style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
-            <span className="w-2 h-2 rounded-full bg-green-400 online-pulse flex-shrink-0" />
-            <span className="text-xs font-bold text-green-400 tabular-nums">{onlineCount}</span>
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>online</span>
+          <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full"
+              style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+              <span className="w-2 h-2 rounded-full bg-green-400 online-pulse flex-shrink-0" />
+              <span className="text-xs font-bold text-green-400 tabular-nums">{onlineCount}</span>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>çevrimiçi</span>
+            </div>
+
+            <Link
+              href="/#promos"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
+              style={{
+                textDecoration: 'none',
+                color: '#bef264',
+                background: 'rgba(190,242,100,0.08)',
+                border: '1px solid rgba(190,242,100,0.22)',
+              }}
+            >
+              <span>🎁</span>
+              Günlük Bonus
+            </Link>
           </div>
 
           {/* Desktop nav */}
@@ -96,45 +99,78 @@ export default function Header() {
 
           {/* Right side */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Balance chip */}
-            <div
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold cursor-pointer transition-all"
-              style={{
-                background: 'rgba(245,158,11,0.08)',
-                border: '1px solid rgba(245,158,11,0.25)',
-              }}
-              onClick={() => setShowDeposit(true)}
-              title="Click to deposit"
-            >
-              <span className="text-yellow-400 text-base leading-none">$</span>
-              <span className="text-yellow-300 tabular-nums">{balance.toFixed(2)}</span>
-            </div>
+            {currentUser && (
+              <div
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all"
+                style={{
+                  background: 'rgba(245,158,11,0.08)',
+                  border: '1px solid rgba(245,158,11,0.25)',
+                }}
+                title="Mevcut bakiye"
+              >
+                <span className="text-yellow-400 text-base leading-none">$</span>
+                <span className="text-yellow-300 tabular-nums">{balance.toFixed(2)}</span>
+              </div>
+            )}
 
-            {/* Deposit CTA */}
-            <button
-              onClick={() => setShowDeposit(true)}
-              className="btn-primary text-sm py-1.5 px-4 hidden sm:inline-flex"
-            >
-              + Deposit
-            </button>
+            {currentUser && (
+              <Link
+                href="/inventory"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-secondary)',
+                  textDecoration: 'none',
+                }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                Envanter
+              </Link>
+            )}
 
-            {/* Inventory */}
-            <Link
-              href="/inventory"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
-              style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-secondary)',
-                textDecoration: 'none',
-              }}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              Inventory
-            </Link>
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all"
+                style={{
+                  background: 'rgba(249,115,22,0.1)',
+                  border: '1px solid rgba(249,115,22,0.32)',
+                  color: '#fb923c',
+                  textDecoration: 'none',
+                }}
+              >
+                Admin
+              </Link>
+            )}
+
+            {currentUser ? (
+              <button
+                onClick={logout}
+                className="hidden lg:inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all"
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                title={`${currentUser.username} hesabından çık`}
+              >
+                <span
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black text-white"
+                  style={{ background: currentUser.avatarColor }}
+                >
+                  {currentUser.username[0]?.toUpperCase()}
+                </span>
+                Çıkış
+              </button>
+            ) : (
+              <Link
+                href="/account"
+                className="hidden lg:inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all"
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', textDecoration: 'none' }}
+              >
+                Giriş
+              </Link>
+            )}
 
             {/* Mobile hamburger */}
             <button
@@ -159,7 +195,7 @@ export default function Header() {
           >
             <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
               <span className="w-2 h-2 rounded-full bg-green-400 online-pulse" />
-              <span className="text-xs font-bold text-green-400">{onlineCount} online</span>
+              <span className="text-xs font-bold text-green-400">{onlineCount} çevrimiçi</span>
             </div>
             {navLinks.map(link => (
               <Link
@@ -172,6 +208,7 @@ export default function Header() {
                   borderColor: 'var(--border)',
                   background: pathname === link.href ? 'rgba(249,115,22,0.06)' : 'transparent',
                 }}
+                onClick={() => setMobileOpen(false)}
               >
                 {pathname === link.href && (
                   <span className="w-1 h-4 rounded-full mr-3 flex-shrink-0" style={{ background: '#f97316' }} />
@@ -179,104 +216,57 @@ export default function Header() {
                 {link.label}
               </Link>
             ))}
-            <Link
-              href="/inventory"
-              className="flex items-center gap-2 px-4 py-3.5 text-sm font-medium"
-              style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              Inventory
-            </Link>
-            <div className="px-4 py-3">
-              <button onClick={() => { setShowDeposit(true); setMobileOpen(false); }}
-                className="btn-primary w-full justify-center">
-                + Deposit
+            {currentUser && (
+              <Link
+                href="/inventory"
+                className="flex items-center gap-2 px-4 py-3.5 text-sm font-medium"
+                style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}
+                onClick={() => setMobileOpen(false)}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                Envanter
+              </Link>
+            )}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-2 px-4 py-3.5 text-sm font-medium"
+                style={{ color: '#fb923c', textDecoration: 'none' }}
+                onClick={() => setMobileOpen(false)}
+              >
+                Admin
+              </Link>
+            )}
+            {currentUser ? (
+              <button
+                onClick={() => { logout(); setMobileOpen(false); }}
+                className="mx-4 mb-2 rounded-lg px-4 py-3 text-left text-sm font-semibold"
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+              >
+                {currentUser.username} hesabından çık
               </button>
-            </div>
+            ) : (
+              <Link
+                href="/account"
+                className="flex items-center gap-2 px-4 py-3.5 text-sm font-medium"
+                style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}
+                onClick={() => setMobileOpen(false)}
+              >
+                Giriş / Kayıt
+              </Link>
+            )}
+            {currentUser && (
+              <div className="mx-4 mb-3 rounded-lg px-4 py-3 text-sm font-bold text-yellow-300"
+                style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}>
+                Bakiye: ${balance.toFixed(2)}
+              </div>
+            )}
           </div>
         )}
       </header>
-
-      {/* Deposit Modal */}
-      {showDeposit && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}
-          onClick={e => e.target === e.currentTarget && setShowDeposit(false)}
-        >
-          <div className="card p-6 w-full max-w-sm animate-fade-up">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-black">Deposit Funds</h2>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Select an amount or enter custom</p>
-              </div>
-              <button
-                onClick={() => setShowDeposit(false)}
-                className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
-                style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              {[5, 10, 20, 50, 100, 250].map(amount => (
-                <button
-                  key={amount}
-                  onClick={() => handleDeposit(amount)}
-                  className="py-3 rounded-xl font-bold transition-all hover:scale-105 active:scale-95"
-                  style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = '#f97316';
-                    e.currentTarget.style.background = 'rgba(249,115,22,0.08)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                    e.currentTarget.style.background = 'var(--bg-secondary)';
-                  }}
-                >
-                  <div className="text-yellow-400 text-lg">${amount}</div>
-                </button>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min="1"
-                value={depositAmount}
-                onChange={e => setDepositAmount(e.target.value)}
-                placeholder="Custom amount…"
-                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
-                style={{
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                }}
-                onKeyDown={e => e.key === 'Enter' && handleDeposit(parseFloat(depositAmount) || 0)}
-              />
-              <button
-                onClick={() => handleDeposit(parseFloat(depositAmount) || 0)}
-                className="btn-primary text-sm px-4"
-              >
-                Add
-              </button>
-            </div>
-
-            <div
-              className="mt-4 p-3 rounded-lg text-center text-xs"
-              style={{ background: 'var(--bg-secondary)', color: 'var(--text-muted)' }}
-            >
-              🎮 Demo site — no real money involved
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

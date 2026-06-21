@@ -31,40 +31,40 @@ export default function ProvablyFairPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-black mb-2">🔐 Provably Fair</h1>
         <p style={{ color: 'var(--text-muted)' }}>
-          Every outcome on CaseHug is provably fair. You can verify any result independently.
+          Casedevo&apos;daki her sonuç doğrulanabilir adil sistemle üretilir. İstediğin sonucu bağımsız olarak kontrol edebilirsin.
         </p>
       </div>
 
       {/* How it works */}
       <div className="card p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">How It Works</h2>
+        <h2 className="text-xl font-bold mb-4">Nasıl Çalışır?</h2>
         <div className="space-y-4">
           {[
             {
               step: '1',
-              title: 'Server Seed',
-              desc: 'Before each game, we generate a random server seed and provide you with its hash. This commits us to the outcome before you act.',
+              title: 'Sunucu Seed’i',
+              desc: 'Her oyundan önce rastgele bir sunucu seed’i üretir ve hash değerini gösteririz. Böylece sonuç, sen işlem yapmadan önce kilitlenmiş olur.',
               icon: '🖥️',
               color: '#4b69ff',
             },
             {
               step: '2',
-              title: 'Client Seed',
-              desc: 'You provide a client seed (or we generate one). This ensures you have influence over the outcome, preventing manipulation.',
+              title: 'İstemci Seed’i',
+              desc: 'İstemci seed’ini sen girersin veya sistem üretir. Bu, sonuca senin de etki etmeni sağlar ve manipülasyonu engeller.',
               icon: '👤',
               color: '#8847ff',
             },
             {
               step: '3',
               title: 'Nonce',
-              desc: 'Each bet increments a nonce counter, ensuring every roll produces a unique result even with the same seeds.',
+              desc: 'Her bahis nonce sayacını artırır. Böylece aynı seed’lerle bile her roll benzersiz bir sonuç üretir.',
               icon: '🔢',
               color: '#d32ce6',
             },
             {
               step: '4',
-              title: 'Result Generation',
-              desc: 'The outcome is computed as HMAC-SHA256(serverSeed, clientSeed + nonce), then converted to a float between 0 and 1.',
+              title: 'Sonuç Üretimi',
+              desc: 'Sonuç HMAC-SHA256(serverSeed, clientSeed + nonce) ile hesaplanır ve 0 ile 1 arasında bir sayıya dönüştürülür.',
               icon: '🎲',
               color: '#f97316',
             },
@@ -73,7 +73,7 @@ export default function ProvablyFairPage() {
               <div className="text-2xl flex-shrink-0">{item.icon}</div>
               <div>
                 <h3 className="font-bold mb-1" style={{ color: item.color }}>
-                  Step {item.step}: {item.title}
+                  Adım {item.step}: {item.title}
                 </h3>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{item.desc}</p>
               </div>
@@ -84,11 +84,11 @@ export default function ProvablyFairPage() {
 
       {/* Verification tool */}
       <div className="card p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">Verify a Result</h2>
+        <h2 className="text-xl font-bold mb-4">Sonuç Doğrula</h2>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
-              Server Seed
+              Sunucu Seed’i
             </label>
             <input
               value={serverSeed}
@@ -102,7 +102,7 @@ export default function ProvablyFairPage() {
           </div>
           <div>
             <label className="block text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
-              Client Seed
+              İstemci Seed’i
             </label>
             <input
               value={clientSeed}
@@ -124,7 +124,7 @@ export default function ProvablyFairPage() {
             />
           </div>
           <button onClick={verify} className="btn-primary">
-            🔍 Verify Result
+            🔍 Sonucu Doğrula
           </button>
           {verifyResult && (
             <div className="p-3 rounded-lg font-mono text-sm" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: '#22c55e' }}>
@@ -136,16 +136,14 @@ export default function ProvablyFairPage() {
 
       {/* Odds table */}
       <div className="card p-6">
-        <h2 className="text-xl font-bold mb-4">Drop Rates</h2>
+        <h2 className="text-xl font-bold mb-4">Drop Oranları</h2>
         <div className="space-y-2">
           {[
-            { rarity: 'Consumer Grade', color: '#b0c3d9', chance: '79.92%' },
-            { rarity: 'Industrial Grade', color: '#5e98d9', chance: '15.98%' },
-            { rarity: 'Mil-Spec', color: '#4b69ff', chance: '3.20%' },
-            { rarity: 'Restricted', color: '#8847ff', chance: '0.64%' },
-            { rarity: 'Classified', color: '#d32ce6', chance: '0.128%' },
-            { rarity: 'Covert', color: '#eb4b4b', chance: '0.0256%' },
-            { rarity: 'Extraordinary (Knife/Glove)', color: '#e4ae39', chance: '0.0064%' },
+            { rarity: 'Mil-Spec', color: '#4b69ff', chance: '79.92%' },
+            { rarity: 'Kısıtlı', color: '#8847ff', chance: '15.98%' },
+            { rarity: 'Gizli', color: '#d32ce6', chance: '3.20%' },
+            { rarity: 'Çok Gizli', color: '#eb4b4b', chance: '0.64%' },
+            { rarity: 'Olağanüstü (Bıçak/Eldiven)', color: '#e4ae39', chance: '0.26%' },
           ].map((row) => (
             <div key={row.rarity} className="flex items-center gap-3">
               <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: row.color }} />
@@ -163,8 +161,8 @@ export default function ProvablyFairPage() {
             </div>
           ))}
         </div>
-        <p className="mt-4 text-xs" style={{ color: 'var(--text-muted)' }}>
-          * StatTrak™ items have an additional ~10% chance modifier applied to any eligible drop.
+        <p className="mt-4 text-xs leading-5" style={{ color: 'var(--text-muted)' }}>
+          Tekil skin oranı, nadirlik oranının kasadaki aynı nadirlikteki skin sayısına bölünmesiyle hesaplanır.
         </p>
       </div>
     </div>

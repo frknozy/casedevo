@@ -9,19 +9,9 @@ type SortOpt = 'newest' | 'oldest' | 'price-high' | 'price-low' | 'rarity';
 
 const RARITY_ORDER: Rarity[] = ['extraordinary', 'covert', 'classified', 'restricted', 'milspec', 'industrial', 'consumer'];
 
-function KnifeIcon({ color }: { color: string }) {
-  return (
-    <svg width="52" height="52" viewBox="0 0 64 64" fill="none"
-      style={{ filter: `drop-shadow(0 2px 8px ${color}80)` }}>
-      <path d="M48 8 L16 40 L20 44 L24 48 L56 16 Z" fill={color} opacity="0.9" />
-      <path d="M16 40 L12 52 L24 48 Z" fill={color} opacity="0.6" />
-      <path d="M48 8 L56 16 L52 20 L44 12 Z" fill="white" opacity="0.25" />
-    </svg>
-  );
-}
-
 export default function InventoryPage() {
-  const { inventory, balance, sellItem, sellSelected, sellAll } = useStore();
+  const { inventory, balance, sellItem, sellSelected, sellAll, users, currentUserId, hasHydrated } = useStore();
+  const currentUser = users.find((user) => user.id === currentUserId);
   const [sort, setSort] = useState<SortOpt>('newest');
   const [rarityFilter, setRarityFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -50,7 +40,12 @@ export default function InventoryPage() {
   const raritiesPresent = ['all', ...RARITY_ORDER.filter(r => inventory.some(i => i.rarity === r))];
 
   const toggleSelect = (id: string) =>
-    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const toggleAll = () => {
     if (selected.size === sorted.length && sorted.length > 0) setSelected(new Set());
@@ -62,30 +57,55 @@ export default function InventoryPage() {
     setSelected(new Set());
   };
 
+  if (!hasHydrated) {
+    return (
+      <div className="mx-auto max-w-[720px] px-4 py-12 text-center">
+        <div className="card p-10">
+          <div className="mx-auto mb-4 h-10 w-10 animate-pulse rounded-full" style={{ background: 'rgba(249,115,22,0.22)' }} />
+          <h1 className="text-3xl font-black">Envanter hazırlanıyor</h1>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="mx-auto max-w-[720px] px-4 py-12 text-center">
+        <div className="card p-10">
+          <h1 className="text-3xl font-black">Envanter için giriş yap</h1>
+          <p className="mx-auto mt-3 max-w-md text-sm" style={{ color: 'var(--text-muted)' }}>
+            Kazandığın skinleri, bakiye bilgisini ve satış işlemlerini görmek için kayıtlı hesap gerekir.
+          </p>
+          <Link href="/account" className="btn-primary mt-6" style={{ textDecoration: 'none' }}>Giriş / Kayıt</Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-8">
       {/* Header */}
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-black mb-1">Inventory</h1>
+          <h1 className="text-3xl font-black mb-1">Envanter</h1>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            {inventory.length} items · Total value&nbsp;
+            {inventory.length} eşya · Toplam değer&nbsp;
             <span className="text-yellow-400 font-bold">${totalValue.toFixed(2)}</span>
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {selected.size > 0 && (
             <button onClick={handleSellSelected} className="btn-green text-sm">
-              💰 Sell Selected (${selectedValue.toFixed(2)})
+              💰 Seçilenleri Sat (${selectedValue.toFixed(2)})
             </button>
           )}
           {inventory.length > 0 && (
             <button onClick={() => { sellAll(); setSelected(new Set()); }} className="btn-secondary text-sm">
-              Sell All (${totalValue.toFixed(2)})
+              Tümünü Sat (${totalValue.toFixed(2)})
             </button>
           )}
           <Link href="/" className="btn-primary text-sm" style={{ textDecoration: 'none' }}>
-            + Open Cases
+            + Kasa Aç
           </Link>
         </div>
       </div>
@@ -93,10 +113,10 @@ export default function InventoryPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'Total Items', value: inventory.length.toString(), icon: '📦' },
-          { label: 'Total Value', value: `$${totalValue.toFixed(2)}`, icon: '💰', gold: true },
-          { label: 'Balance', value: `$${balance.toFixed(2)}`, icon: '💳' },
-          { label: 'Best Item', value: bestItem ? `$${bestItem.price.toFixed(2)}` : '—', icon: '⭐', gold: true },
+          { label: 'Toplam Eşya', value: inventory.length.toString(), icon: '📦' },
+          { label: 'Toplam Değer', value: `$${totalValue.toFixed(2)}`, icon: '💰', gold: true },
+          { label: 'Bakiye', value: `$${balance.toFixed(2)}`, icon: '💳' },
+          { label: 'En İyi Eşya', value: bestItem ? `$${bestItem.price.toFixed(2)}` : '—', icon: '⭐', gold: true },
         ].map(s => (
           <div key={s.label} className="card p-4 flex items-center gap-3">
             <span className="text-2xl">{s.icon}</span>
@@ -111,9 +131,9 @@ export default function InventoryPage() {
       {inventory.length === 0 ? (
         <div className="card p-20 text-center">
           <div className="text-7xl mb-5">📦</div>
-          <h2 className="text-2xl font-bold mb-2">Your inventory is empty</h2>
-          <p className="mb-6 text-sm" style={{ color: 'var(--text-muted)' }}>Open some cases to win skins!</p>
-          <Link href="/" className="btn-primary" style={{ textDecoration: 'none' }}>Browse Cases</Link>
+          <h2 className="text-2xl font-bold mb-2">Envanterin boş</h2>
+          <p className="mb-6 text-sm" style={{ color: 'var(--text-muted)' }}>Skin kazanmak için birkaç kasa aç!</p>
+          <Link href="/" className="btn-primary" style={{ textDecoration: 'none' }}>Kasaları İncele</Link>
         </div>
       ) : (
         <>
@@ -126,7 +146,7 @@ export default function InventoryPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <input value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder="Search skins…"
+                  placeholder="Skin ara..."
                   className="pl-9 pr-3 py-2 rounded-lg text-sm outline-none"
                   style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', width: 200 }} />
               </div>
@@ -135,24 +155,24 @@ export default function InventoryPage() {
               <select value={sort} onChange={e => setSort(e.target.value as SortOpt)}
                 className="text-sm px-3 py-2 rounded-lg outline-none"
                 style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="price-high">Price: High → Low</option>
-                <option value="price-low">Price: Low → High</option>
-                <option value="rarity">By Rarity</option>
+                <option value="newest">Önce En Yeni</option>
+                <option value="oldest">Önce En Eski</option>
+                <option value="price-high">Fiyat: Yüksekten Düşüğe</option>
+                <option value="price-low">Fiyat: Düşükten Yükseğe</option>
+                <option value="rarity">Nadirliğe Göre</option>
               </select>
 
               {/* Select all */}
               <button onClick={toggleAll}
                 className="text-sm px-3 py-2 rounded-lg transition-all"
                 style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-                {selected.size === sorted.length && sorted.length > 0 ? 'Deselect All' : 'Select All'}
+                {selected.size === sorted.length && sorted.length > 0 ? 'Tümünü Kaldır' : 'Tümünü Seç'}
               </button>
 
               <span className="text-sm ml-auto" style={{ color: 'var(--text-muted)' }}>
                 {selected.size > 0
-                  ? `${selected.size} selected · $${selectedValue.toFixed(2)}`
-                  : `${sorted.length} item${sorted.length !== 1 ? 's' : ''}`}
+                  ? `${selected.size} seçildi · $${selectedValue.toFixed(2)}`
+                  : `${sorted.length} eşya`}
               </span>
             </div>
 
@@ -171,7 +191,7 @@ export default function InventoryPage() {
                       border: `1px solid ${active ? clr + '55' : 'var(--border)'}`,
                     }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: clr, display: 'inline-block', flexShrink: 0 }} />
-                    {r === 'all' ? 'All' : RARITY_LABELS[r as Rarity]}
+                    {r === 'all' ? 'Tümü' : RARITY_LABELS[r as Rarity]}
                     <span className="text-xs opacity-60">({count})</span>
                   </button>
                 );
@@ -182,15 +202,14 @@ export default function InventoryPage() {
           {sorted.length === 0 ? (
             <div className="card p-12 text-center">
               <div className="text-5xl mb-3">🔍</div>
-              <p className="text-lg font-semibold mb-1">No items match your filters</p>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Try adjusting search or rarity filter</p>
+              <p className="text-lg font-semibold mb-1">Filtrelerle eşleşen eşya yok</p>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Aramayı veya nadirlik filtresini değiştir</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {sorted.map(item => {
                 const clr = RARITY_COLORS[item.rarity];
                 const isSel = selected.has(item.inventoryId);
-                const isKnife = item.weapon.startsWith('★');
                 return (
                   <div key={item.inventoryId}
                     className="rounded-2xl overflow-hidden cursor-pointer transition-all select-none group"
@@ -217,15 +236,11 @@ export default function InventoryPage() {
                       {/* Rarity dot */}
                       <div className="absolute top-2.5 left-2.5 w-2.5 h-2.5 rounded-full" style={{ background: clr }} />
 
-                      {isKnife ? (
-                        <KnifeIcon color={clr} />
-                      ) : (
-                        <Image src={item.image} alt={`${item.weapon} | ${item.name}`}
-                          width={100} height={72}
-                          className="object-contain group-hover:scale-105 transition-transform"
-                          style={{ filter: `drop-shadow(0 4px 10px ${clr}60)` }}
-                          unoptimized />
-                      )}
+                      <Image src={item.image} alt={`${item.weapon} | ${item.name}`}
+                        width={100} height={72}
+                        className="object-contain group-hover:scale-105 transition-transform"
+                        style={{ filter: `drop-shadow(0 4px 10px ${clr}60)` }}
+                        unoptimized />
                     </div>
 
                     {/* Info */}
@@ -251,7 +266,7 @@ export default function InventoryPage() {
                           }}
                           onMouseEnter={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.22)')}
                           onMouseLeave={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.08)')}>
-                          Sell
+                          Sat
                         </button>
                       </div>
                     </div>
