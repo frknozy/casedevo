@@ -180,6 +180,40 @@ export default function AdminPage() {
   };
 
   return (
+    <>
+    {/* Delete confirmation modal */}
+    {deleteUserId && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
+        <div className="w-full max-w-sm rounded-3xl p-6" style={{ background: 'var(--bg-primary)', border: '1px solid rgba(239,68,68,0.4)' }}>
+          <h2 className="mb-2 text-xl font-black text-red-400">Kullanıcıyı Sil</h2>
+          <p className="mb-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
+            <strong className="text-white">{users.find(u => u.id === deleteUserId)?.username}</strong> kullanıcısı ve tüm envanteri kalıcı olarak silinecek. Bu işlem geri alınamaz.
+          </p>
+          <div className="mb-4 flex items-center gap-2">
+            <input id="del-confirm" type="checkbox" checked={deleteConfirm} onChange={e => setDeleteConfirm(e.target.checked)} className="h-4 w-4 cursor-pointer" />
+            <label htmlFor="del-confirm" className="cursor-pointer text-sm font-semibold">Silmek istediğimi onaylıyorum</label>
+          </div>
+          {deleteMessage && (
+            <div className="mb-3 rounded-xl px-3 py-2 text-sm font-semibold"
+              style={{ background: deleteMessage.ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: deleteMessage.ok ? '#86efac' : '#fca5a5' }}>
+              {deleteMessage.text}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button onClick={() => { setDeleteUserId(''); setDeleteConfirm(false); setDeleteMessage(null); }} className="btn-secondary flex-1 justify-center">İptal</button>
+            <button
+              onClick={() => void submitDeleteUser()}
+              disabled={!deleteConfirm}
+              className="flex-1 justify-center rounded-lg px-4 py-2.5 text-sm font-black transition-all disabled:opacity-40"
+              style={{ background: 'rgba(239,68,68,0.25)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5' }}
+            >
+              Kalıcı Sil
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="mx-auto max-w-[1320px] px-4 py-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -434,8 +468,8 @@ export default function AdminPage() {
                         <div className="flex gap-1.5">
                           <button
                             onClick={() => { setDeleteUserId(user.id); setDeleteConfirm(false); setDeleteMessage(null); }}
-                            disabled={user.role === 'admin'}
-                            title={user.role === 'admin' ? 'Admin silinemez' : 'Kullanıcıyı sil'}
+                            disabled={user.id === currentUserId}
+                            title={user.id === currentUserId ? 'Kendi hesabını silemezsin' : 'Kullanıcıyı sil'}
                             className="rounded-lg px-2 py-1 text-xs font-black transition-all disabled:opacity-30"
                             style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5' }}
                           >
@@ -578,43 +612,9 @@ export default function AdminPage() {
             </section>
           )}
 
-          {deleteUserId && (
-            <section className="card p-5" style={{ border: '1px solid rgba(239,68,68,0.3)' }}>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-xl font-black text-red-400">Kullanıcı Sil</h2>
-                <button onClick={() => setDeleteUserId('')} className="text-sm" style={{ color: 'var(--text-muted)' }}>✕</button>
-              </div>
-              <div className="mb-3 rounded-xl p-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5' }}>
-                <strong>{users.find(u => u.id === deleteUserId)?.username}</strong> kullanıcısı ve tüm envanteri kalıcı olarak silinecek.
-              </div>
-              <div className="mb-3 flex items-center gap-2">
-                <input
-                  id="delete-confirm"
-                  type="checkbox"
-                  checked={deleteConfirm}
-                  onChange={(e) => setDeleteConfirm(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                <label htmlFor="delete-confirm" className="text-sm font-semibold">Silmek istediğimi onaylıyorum</label>
-              </div>
-              {deleteMessage && (
-                <div className="mb-3 rounded-xl px-3 py-2 text-sm font-semibold"
-                  style={{ background: deleteMessage.ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: deleteMessage.ok ? '#86efac' : '#fca5a5' }}>
-                  {deleteMessage.text}
-                </div>
-              )}
-              <button
-                onClick={() => void submitDeleteUser()}
-                disabled={!deleteConfirm}
-                className="w-full justify-center rounded-lg px-4 py-2.5 text-sm font-black transition-all disabled:opacity-40"
-                style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', color: '#fca5a5' }}
-              >
-                Kullanıcıyı Kalıcı Sil
-              </button>
-            </section>
-          )}
         </aside>
       </div>
     </div>
+    </>
   );
 }
