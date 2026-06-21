@@ -53,7 +53,7 @@ VALUES (
   'a0000000-0000-0000-0000-000000000001',
   'admin',
   'admin@casedevo.local',
-  '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a',
+  '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
   'admin',
   '#f97316',
   'Casedevo Admin',

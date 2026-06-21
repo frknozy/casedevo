@@ -32,6 +32,12 @@ export default function AdminPage() {
   const [balanceUserId, setBalanceUserId] = useState('');
   const [balanceAmount, setBalanceAmount] = useState('');
   const [balanceMessage, setBalanceMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [resetPasswordUserId, setResetPasswordUserId] = useState('');
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [resetPasswordMessage, setResetPasswordMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [deleteUserId, setDeleteUserId] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const managedCases = useMemo(() => applyCaseOverrides(cases, caseOverrides), [caseOverrides]);
   const managedCasesById = useMemo(() => new Map(managedCases.map((caseItem) => [caseItem.id, caseItem])), [managedCases]);
@@ -124,6 +130,42 @@ export default function AdminPage() {
     updateCase(caseItem, { skinChances: {} });
   };
 
+  const refreshUsers = () => {
+    if (!currentUserId) return;
+    fetch(`/api/users?requesterId=${currentUserId}`)
+      .then((res) => res.json())
+      .then((data) => { if (data.ok) setUsers(data.users); })
+      .catch(console.error);
+  };
+
+  const submitResetPassword = async () => {
+    if (!resetPasswordUserId || !resetPasswordValue) return;
+    const res = await fetch('/api/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requesterId: currentUserId, targetUserId: resetPasswordUserId, action: 'reset_password', newPassword: resetPasswordValue }),
+    });
+    const data = await res.json();
+    setResetPasswordMessage({ ok: data.ok, text: data.message });
+    if (data.ok) setResetPasswordValue('');
+  };
+
+  const submitDeleteUser = async () => {
+    if (!deleteUserId || !deleteConfirm) return;
+    const res = await fetch('/api/users', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requesterId: currentUserId, targetUserId: deleteUserId }),
+    });
+    const data = await res.json();
+    setDeleteMessage({ ok: data.ok, text: data.message });
+    if (data.ok) {
+      setDeleteUserId('');
+      setDeleteConfirm(false);
+      refreshUsers();
+    }
+  };
+
   const submitBalance = async (action: 'add' | 'remove') => {
     const targetUserId = balanceUserId || users[0]?.id || '';
     const amount = Number(balanceAmount);
@@ -133,13 +175,7 @@ export default function AdminPage() {
     setBalanceMessage({ ok: result.ok, text: result.message });
     if (result.ok) {
       setBalanceAmount('');
-      // Refresh user list
-      if (currentUserId) {
-        fetch(`/api/users?requesterId=${currentUserId}`)
-          .then((res) => res.json())
-          .then((data) => { if (data.ok) setUsers(data.users); })
-          .catch(console.error);
-      }
+      refreshUsers();
     }
   };
 
@@ -325,6 +361,7 @@ export default function AdminPage() {
                     <th className="px-5 py-3">Açılan Kasa</th>
                     <th className="px-5 py-3">Gizli Avantaj</th>
                     <th className="px-5 py-3">Son Giriş</th>
+                    <th className="px-5 py-3">İşlemler</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -333,6 +370,7 @@ export default function AdminPage() {
                       <td className="px-5 py-3">
                         <div className="font-bold">{user.username}</div>
                         <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{user.email}</div>
+                        <div className="mt-0.5 text-[10px] font-mono" style={{ color: 'var(--text-muted)', opacity: 0.6 }}>{user.id.slice(0, 8)}…</div>
                       </td>
                       <td className="px-5 py-3">
                         <span className="rounded-full px-2 py-1 text-xs font-black" style={{ background: user.role === 'admin' ? 'rgba(249,115,22,0.12)' : 'rgba(59,130,246,0.12)', color: user.role === 'admin' ? '#fb923c' : '#93c5fd' }}>
@@ -388,6 +426,26 @@ export default function AdminPage() {
                         </div>
                       </td>
                       <td className="px-5 py-3" style={{ color: 'var(--text-muted)' }}>{formatDate(user.lastLoginAt)}</td>
+                      <td className="px-5 py-3">
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => { setDeleteUserId(user.id); setDeleteConfirm(false); setDeleteMessage(null); }}
+                            disabled={user.role === 'admin'}
+                            title={user.role === 'admin' ? 'Admin silinemez' : 'Kullanıcıyı sil'}
+                            className="rounded-lg px-2 py-1 text-xs font-black transition-all disabled:opacity-30"
+                            style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5' }}
+                          >
+                            Sil
+                          </button>
+                          <button
+                            onClick={() => { setResetPasswordUserId(user.id); setResetPasswordMessage(null); setResetPasswordValue(''); }}
+                            className="rounded-lg px-2 py-1 text-xs font-black transition-all"
+                            style={{ background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.3)', color: '#fde047' }}
+                          >
+                            Şifre
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -485,14 +543,72 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="card p-5">
-            <h2 className="text-xl font-black">Yönetim Notları</h2>
-            <div className="mt-3 space-y-3 text-sm leading-6" style={{ color: 'var(--text-muted)' }}>
-              <p>Bu panel demo amaçlıdır; tüm veriler tarayıcı local storage içinde saklanır.</p>
-              <p>Kasa fiyatı ve rozet değişiklikleri ana sayfa, kasa açma ve battle seçimlerine yansır.</p>
-              <p>Kullanıcı hareketleri profil ve admin aktivite akışında takip edilir.</p>
-            </div>
-          </section>
+          {resetPasswordUserId && (
+            <section className="card p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-xl font-black">Şifre Sıfırla</h2>
+                <button onClick={() => setResetPasswordUserId('')} className="text-sm" style={{ color: 'var(--text-muted)' }}>✕</button>
+              </div>
+              <div className="mb-2 text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                {users.find(u => u.id === resetPasswordUserId)?.username} kullanıcısı
+              </div>
+              <div className="space-y-3">
+                <input
+                  value={resetPasswordValue}
+                  onChange={(e) => { setResetPasswordValue(e.target.value); setResetPasswordMessage(null); }}
+                  type="text"
+                  placeholder="Yeni şifre (min. 4 karakter)"
+                  className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
+                  style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+                />
+                {resetPasswordMessage && (
+                  <div className="rounded-xl px-3 py-2 text-sm font-semibold"
+                    style={{ background: resetPasswordMessage.ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: resetPasswordMessage.ok ? '#86efac' : '#fca5a5' }}>
+                    {resetPasswordMessage.text}
+                  </div>
+                )}
+                <button onClick={() => void submitResetPassword()} className="btn-primary w-full justify-center">
+                  Şifreyi Güncelle
+                </button>
+              </div>
+            </section>
+          )}
+
+          {deleteUserId && (
+            <section className="card p-5" style={{ border: '1px solid rgba(239,68,68,0.3)' }}>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-xl font-black text-red-400">Kullanıcı Sil</h2>
+                <button onClick={() => setDeleteUserId('')} className="text-sm" style={{ color: 'var(--text-muted)' }}>✕</button>
+              </div>
+              <div className="mb-3 rounded-xl p-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5' }}>
+                <strong>{users.find(u => u.id === deleteUserId)?.username}</strong> kullanıcısı ve tüm envanteri kalıcı olarak silinecek.
+              </div>
+              <div className="mb-3 flex items-center gap-2">
+                <input
+                  id="delete-confirm"
+                  type="checkbox"
+                  checked={deleteConfirm}
+                  onChange={(e) => setDeleteConfirm(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <label htmlFor="delete-confirm" className="text-sm font-semibold">Silmek istediğimi onaylıyorum</label>
+              </div>
+              {deleteMessage && (
+                <div className="mb-3 rounded-xl px-3 py-2 text-sm font-semibold"
+                  style={{ background: deleteMessage.ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: deleteMessage.ok ? '#86efac' : '#fca5a5' }}>
+                  {deleteMessage.text}
+                </div>
+              )}
+              <button
+                onClick={() => void submitDeleteUser()}
+                disabled={!deleteConfirm}
+                className="w-full justify-center rounded-lg px-4 py-2.5 text-sm font-black transition-all disabled:opacity-40"
+                style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', color: '#fca5a5' }}
+              >
+                Kullanıcıyı Kalıcı Sil
+              </button>
+            </section>
+          )}
         </aside>
       </div>
     </div>

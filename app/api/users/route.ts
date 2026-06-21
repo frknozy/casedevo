@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin, getUserInventory } from '@/lib/supabase-server';
+import { supabaseAdmin, getUserInventory, hashPassword } from '@/lib/supabase-server';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { requesterId, targetUserId, action, amount, percent } = await request.json();
+    const { requesterId, targetUserId, action, amount, percent, newPassword } = await request.json();
 
     const { data: requester } = await supabaseAdmin.from('profiles').select('role').eq('id', requesterId).single();
     if (requester?.role !== 'admin') return NextResponse.json({ ok: false, message: 'Yetkisiz.' }, { status: 403 });
@@ -67,7 +67,32 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ ok: true, message: `Boost +%${cleanPercent.toFixed(2)} olarak ayarlandı.` });
     }
 
+    if (action === 'reset_password') {
+      if (!newPassword || newPassword.length < 4) return NextResponse.json({ ok: false, message: 'Şifre en az 4 karakter olmalı.' }, { status: 400 });
+      const hash = await hashPassword(newPassword);
+      await supabaseAdmin.from('profiles').update({ password_hash: hash }).eq('id', targetUserId);
+      return NextResponse.json({ ok: true, message: 'Şifre sıfırlandı.' });
+    }
+
     return NextResponse.json({ ok: false, message: 'Bilinmeyen işlem.' }, { status: 400 });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ ok: false }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { requesterId, targetUserId } = await request.json();
+
+    const { data: requester } = await supabaseAdmin.from('profiles').select('role').eq('id', requesterId).single();
+    if (requester?.role !== 'admin') return NextResponse.json({ ok: false, message: 'Yetkisiz.' }, { status: 403 });
+
+    if (requesterId === targetUserId) return NextResponse.json({ ok: false, message: 'Kendi hesabını silemezsin.' }, { status: 400 });
+
+    // inventory is CASCADE deleted by FK
+    await supabaseAdmin.from('profiles').delete().eq('id', targetUserId);
+    return NextResponse.json({ ok: true, message: 'Kullanıcı silindi.' });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ ok: false }, { status: 500 });

@@ -136,6 +136,10 @@ function dbInventoryToItems(rows: Array<{ id: string; skin_data: unknown; opened
 }
 
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
+// Track the balance as of last DB fetch so we can send a delta instead of absolute value.
+// This prevents admin-set balance from being overwritten by stale local state.
+let lastSyncedBalance: number | null = null;
+
 function scheduleSyncToBackend(userId: string, getState: () => Store) {
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = setTimeout(async () => {
@@ -146,17 +150,19 @@ function scheduleSyncToBackend(userId: string, getState: () => Store) {
       const { inventoryId, openedAt, ...skin } = item;
       return { id: inventoryId, skin_data: skin };
     });
+    const balanceDelta = lastSyncedBalance !== null ? money(state.balance - lastSyncedBalance) : null;
     await fetch('/api/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId,
-        balance: state.balance,
+        balanceDelta,
         stats: user?.stats,
         activities: user?.activities,
         inventoryAdd,
       }),
     }).catch(console.error);
+    lastSyncedBalance = state.balance;
   }, 1500);
 }
 
@@ -194,6 +200,7 @@ export const useStore = create<Store>()(
               const data = await res.json();
               const inventoryItems = dbInventoryToItems(data.inventory || []);
               const user = dbUserToAccount(data.user, inventoryItems);
+              lastSyncedBalance = user.balance;
               set({ currentUser: user, balance: user.balance, inventory: inventoryItems });
             } else {
               // Session invalid — log out
@@ -234,7 +241,7 @@ export const useStore = create<Store>()(
 
           const inventoryItems = dbInventoryToItems(data.inventory || []);
           const user = dbUserToAccount(data.user, inventoryItems);
-
+          lastSyncedBalance = user.balance;
           set({
             currentUserId: user.id,
             currentUser: user,

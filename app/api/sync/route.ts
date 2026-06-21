@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 
 interface SyncPayload {
   userId: string;
-  balance?: number;
+  balanceDelta?: number | null; // delta to add/subtract, preserves admin changes
   stats?: Record<string, number>;
   activities?: unknown[];
   inventoryAdd?: Array<{ id: string; skin_data: unknown }>;
@@ -13,12 +13,16 @@ interface SyncPayload {
 export async function POST(request: Request) {
   try {
     const body: SyncPayload = await request.json();
-    const { userId, balance, stats, activities, inventoryAdd, inventoryRemove } = body;
+    const { userId, balanceDelta, stats, activities, inventoryAdd, inventoryRemove } = body;
 
     if (!userId) return NextResponse.json({ ok: false }, { status: 400 });
 
+    // Apply balance delta via RPC to avoid overwriting admin changes
+    if (typeof balanceDelta === 'number' && balanceDelta !== 0) {
+      await supabaseAdmin.rpc('increment_balance', { user_id: userId, delta: balanceDelta });
+    }
+
     const profileUpdate: Record<string, unknown> = {};
-    if (balance !== undefined) profileUpdate.balance = balance;
     if (stats !== undefined) profileUpdate.stats = stats;
     if (activities !== undefined) profileUpdate.activities = activities;
 
